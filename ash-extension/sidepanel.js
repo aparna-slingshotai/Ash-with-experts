@@ -1,5 +1,5 @@
 // ─── Ash with Experts — Side Panel Logic ─────────────────────────────────────
-const ASSEMBLYAI_API_KEY = "YOUR_ASSEMBLYAI_API_KEY";
+const ASSEMBLYAI_API_KEY = "acb11f85242b4e6a93f2e76bc6b487ba";
 const ASH_APP_URL = "http://localhost:3000";
 
 let mediaRecorder = null;
