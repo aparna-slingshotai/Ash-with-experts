@@ -10,6 +10,16 @@ const STATES = { IDLE: "idle", DETECTED: "detected", RECORDING: "recording", PRO
 let sessionState = STATES.IDLE;
 let activeTabId = null;
 
+// ── Clicking the extension icon opens the side panel ─────────────────────────
+chrome.action.onClicked.addListener((tab) => {
+  const isCall = CALL_URL_PATTERNS.some(p => p.test(tab.url));
+  if (isCall && sessionState === STATES.IDLE) {
+    handleMeetingDetected(tab.id, tab);
+  } else {
+    chrome.sidePanel.open({ tabId: tab.id });
+  }
+});
+
 // ── Tab monitoring ────────────────────────────────────────────────────────────
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== "complete" || !tab.url) return;
