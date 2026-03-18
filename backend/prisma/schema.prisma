@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Session {
+  id                String          @id @default(uuid())
+  userId            String          @default("default-user")
+  recordedAt        DateTime
+  source            String          @default("ash-extension")
+  rawTranscript     String
+  labeledTranscript Json
+  contextWindow     Json?
+  createdAt         DateTime        @default(now())
+  messages          ThreadMessage[]
+}
+
+model ThreadMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  role      String   // "user" or "assistant"
+  content   String
+  createdAt DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}

@@ -6,13 +6,13 @@
   <title>Ash with Experts</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="sidepanel.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- ── State: Idle (no call detected) ─────────────────────────── -->
+    <!-- ── State: Idle ──────────────────────────────────────────── -->
     <div id="view-idle" class="view active">
       <div class="idle-center">
         <div class="ash-mark">✦</div>
@@ -21,12 +21,8 @@
       </div>
     </div>
 
-    <!-- ── State: Meeting Detected ────────────────────────────────── -->
+    <!-- ── State: Meeting Detected ──────────────────────────────── -->
     <div id="view-detected" class="view">
-      <div class="detected-header">
-        <span class="pulse-dot"></span>
-        <span class="detected-label">Session detected</span>
-      </div>
       <div class="detected-body">
         <div class="ash-mark large">✦</div>
         <h2 class="detected-title">Ready to listen</h2>
@@ -36,7 +32,7 @@
       </div>
     </div>
 
-    <!-- ── State: Recording ───────────────────────────────────────── -->
+    <!-- ── State: Recording ─────────────────────────────────────── -->
     <div id="view-recording" class="view">
       <div class="recording-header">
         <span class="rec-dot"></span>
@@ -44,9 +40,13 @@
         <span id="rec-timer" class="rec-timer">00:00</span>
       </div>
 
-      <div class="transcript-live">
-        <p class="transcript-hint">Live transcript will appear here…</p>
-        <div id="transcript-stream" class="transcript-stream"></div>
+      <div class="recording-body">
+        <div class="recording-visual">
+          <div class="waveform">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <p class="recording-hint">Ash is listening to your session</p>
       </div>
 
       <div class="recording-footer">
@@ -54,7 +54,7 @@
       </div>
     </div>
 
-    <!-- ── State: Processing ──────────────────────────────────────── -->
+    <!-- ── State: Processing ────────────────────────────────────── -->
     <div id="view-processing" class="view">
       <div class="processing-center">
         <div class="spinner"></div>
@@ -63,31 +63,35 @@
       </div>
     </div>
 
-    <!-- ── State: Ready ───────────────────────────────────────────── -->
+    <!-- ── State: Ready ─────────────────────────────────────────── -->
     <div id="view-ready" class="view">
-      <div class="ready-header">
-        <span class="ash-mark small">✦</span>
-        <span class="ready-label">Session ready</span>
-      </div>
-      <div class="speaker-assign" id="speaker-assign">
-        <p class="speaker-title">Which voice is yours?</p>
-        <p class="speaker-sub">Ash detected 2 speakers. Select yours once and we'll remember it.</p>
-        <div class="speaker-options">
-          <button class="speaker-btn" data-speaker="A">
-            <span class="speaker-icon">🎙</span>
-            <span>Speaker A</span>
-            <span class="speaker-preview" id="preview-A"></span>
-          </button>
-          <button class="speaker-btn" data-speaker="B">
-            <span class="speaker-icon">🎙</span>
-            <span>Speaker B</span>
-            <span class="speaker-preview" id="preview-B"></span>
-          </button>
+      <div class="ready-body">
+        <div class="ash-mark small">✦</div>
+        <h2 class="ready-title">Session ready</h2>
+
+        <div id="speaker-assign" class="speaker-assign">
+          <p class="speaker-prompt">Which voice is yours?</p>
+          <p class="speaker-sub">Ash detected 2 speakers. Select yours once and we'll remember it.</p>
+          <div class="speaker-options">
+            <button class="speaker-btn" data-speaker="A">
+              <div class="speaker-btn-content">
+                <span class="speaker-label">Speaker A</span>
+                <span class="speaker-preview" id="preview-A"></span>
+              </div>
+            </button>
+            <button class="speaker-btn" data-speaker="B">
+              <div class="speaker-btn-content">
+                <span class="speaker-label">Speaker B</span>
+                <span class="speaker-preview" id="preview-B"></span>
+              </div>
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="ready-actions" id="ready-actions" style="display:none">
-        <p class="ready-msg">Your session context is built. Open Ash to explore it.</p>
-        <button id="btn-open-ash" class="btn-primary">Open in Ash →</button>
+
+        <div id="ready-actions" class="ready-actions" style="display:none">
+          <p class="ready-msg">Your session context is built. Open Ash to explore it.</p>
+          <button id="btn-open-ash" class="btn-primary">Open in Ash →</button>
+        </div>
       </div>
     </div>
 
