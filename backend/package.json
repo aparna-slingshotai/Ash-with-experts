@@ -1,0 +1,27 @@
+{
+  "name": "ash-experts-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ash with Experts — backend API",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "db:migrate": "npx prisma migrate dev",
+    "db:push": "npx prisma db push",
+    "db:generate": "npx prisma generate",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@prisma/client": "^6.19.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.2"
+  }
+}
