@@ -12,7 +12,7 @@
 <body>
   <div id="app">
 
-    <!-- ── State: Idle ──────────────────────────────────────────── -->
+    <!-- ── Idle ───────────────────────────────────────────────────── -->
     <div id="view-idle" class="view active">
       <div class="idle-center">
         <div class="ash-mark">✦</div>
@@ -21,25 +21,27 @@
       </div>
     </div>
 
-    <!-- ── State: Meeting Detected ──────────────────────────────── -->
+    <!-- ── Detected ───────────────────────────────────────────────── -->
     <div id="view-detected" class="view">
       <div class="detected-body">
         <div class="ash-mark large">✦</div>
         <h2 class="detected-title">Ready to listen</h2>
         <p class="detected-sub">Ash will record this session privately on your device. Nothing is shared until you choose to.</p>
+        <div id="start-error" class="start-error" style="display:none">
+          <p class="start-error-text">Could not access tab audio. Please close this panel, click the <strong>Ash icon (✦)</strong> in your toolbar, then try again.</p>
+        </div>
         <button id="btn-start" class="btn-primary">Start Session</button>
         <button id="btn-dismiss" class="btn-ghost">Not now</button>
       </div>
     </div>
 
-    <!-- ── State: Recording ─────────────────────────────────────── -->
+    <!-- ── Recording ──────────────────────────────────────────────── -->
     <div id="view-recording" class="view">
       <div class="recording-header">
         <span class="rec-dot"></span>
         <span class="rec-label">Recording</span>
         <span id="rec-timer" class="rec-timer">00:00</span>
       </div>
-
       <div class="recording-body">
         <div class="recording-visual">
           <div class="waveform">
@@ -48,49 +50,162 @@
         </div>
         <p class="recording-hint">Ash is listening to your session</p>
       </div>
-
       <div class="recording-footer">
         <button id="btn-stop" class="btn-end">End Session</button>
       </div>
     </div>
 
-    <!-- ── State: Processing ────────────────────────────────────── -->
+    <!-- ── Processing (thinking state) ────────────────────────────── -->
     <div id="view-processing" class="view">
       <div class="processing-center">
-        <div class="spinner"></div>
-        <p class="processing-label">Processing your session…</p>
-        <p class="processing-sub">Ash is transcribing and separating speakers. This takes about a minute.</p>
+        <div class="ash-mark thinking">✦</div>
+        <div class="thinking-text">
+          <span id="thinking-phrase" class="thinking-phrase">finding insights</span>
+          <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+        <div class="thinking-progress">
+          <div class="thinking-bar" id="thinking-bar"></div>
+        </div>
       </div>
     </div>
 
-    <!-- ── State: Ready ─────────────────────────────────────────── -->
-    <div id="view-ready" class="view">
-      <div class="ready-body">
-        <div class="ash-mark small">✦</div>
-        <h2 class="ready-title">Session ready</h2>
+    <!-- ── Context (transcript + uploads) ─────────────────────────── -->
+    <div id="view-context" class="view">
+      <div class="context-scroll">
+        <div class="context-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="context-title">Session captured</h2>
+        </div>
 
-        <div id="speaker-assign" class="speaker-assign">
-          <p class="speaker-prompt">Which voice is yours?</p>
-          <p class="speaker-sub">Ash detected 2 speakers. Select yours once and we'll remember it.</p>
-          <div class="speaker-options">
-            <button class="speaker-btn" data-speaker="A">
-              <div class="speaker-btn-content">
-                <span class="speaker-label">Speaker A</span>
-                <span class="speaker-preview" id="preview-A"></span>
-              </div>
+        <!-- Transcript chip -->
+        <div class="transcript-chip" id="transcript-chip">
+          <div class="chip-header" id="chip-toggle">
+            <div class="chip-icon-wrap">
+              <svg class="chip-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 1h6l4 4v9a2 2 0 01-2 2H4a2 2 0 01-2-2V3a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M10 1v4h4" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <div class="chip-info">
+              <span class="chip-name">Session Transcript</span>
+              <span class="chip-meta" id="chip-meta"></span>
+            </div>
+            <span class="chip-chevron" id="chip-chevron">›</span>
+          </div>
+          <div class="chip-body" id="chip-body">
+            <div class="chip-transcript" id="chip-transcript"></div>
+          </div>
+        </div>
+
+        <!-- Inline speaker selection -->
+        <div id="speaker-assign-inline" class="speaker-inline">
+          <p class="speaker-inline-prompt">Which voice is yours?</p>
+          <div class="speaker-inline-options">
+            <button class="speaker-pill" data-speaker="A">
+              <span class="speaker-pill-dot"></span>
+              <span class="speaker-pill-label">Speaker A</span>
             </button>
-            <button class="speaker-btn" data-speaker="B">
-              <div class="speaker-btn-content">
-                <span class="speaker-label">Speaker B</span>
-                <span class="speaker-preview" id="preview-B"></span>
-              </div>
+            <button class="speaker-pill" data-speaker="B">
+              <span class="speaker-pill-dot"></span>
+              <span class="speaker-pill-label">Speaker B</span>
             </button>
           </div>
         </div>
 
-        <div id="ready-actions" class="ready-actions" style="display:none">
-          <p class="ready-msg">Your session context is built. Open Ash to explore it.</p>
-          <button id="btn-open-ash" class="btn-primary">Open in Ash →</button>
+        <!-- Upload section -->
+        <div class="upload-section">
+          <h3 class="upload-title">Add additional context to help Ash</h3>
+          <p class="upload-sub">Upload images, documents, videos or other media that may help Ash in formulating a great summary.</p>
+          <div class="upload-area" id="upload-area">
+            <div class="upload-area-inner">
+              <span class="upload-plus">+</span>
+              <span class="upload-text">Drop files or click to upload</span>
+            </div>
+          </div>
+          <input type="file" id="file-input" multiple style="display:none" />
+          <div class="uploaded-files" id="uploaded-files"></div>
+        </div>
+
+        <div class="context-actions">
+          <button id="btn-generate" class="btn-primary">Generate Summary ✦</button>
+          <button id="btn-skip" class="btn-ghost">Skip — just the basics</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Summary ────────────────────────────────────────────────── -->
+    <div id="view-summary" class="view">
+      <div class="summary-scroll">
+
+        <!-- EHR Card -->
+        <div class="ehr-card">
+          <div class="ehr-top">
+            <span class="ehr-badge">EHR</span>
+            <h3 class="ehr-heading">Session Record</h3>
+          </div>
+          <div class="ehr-fields" id="ehr-fields">
+            <div class="ehr-row">
+              <span class="ehr-label">Date</span>
+              <span class="ehr-value" id="ehr-date">—</span>
+            </div>
+            <div class="ehr-row">
+              <span class="ehr-label">Duration</span>
+              <span class="ehr-value" id="ehr-duration">—</span>
+            </div>
+            <div class="ehr-row">
+              <span class="ehr-label">Session Type</span>
+              <span class="ehr-value" id="ehr-type">Individual Therapy</span>
+            </div>
+            <div class="ehr-row">
+              <span class="ehr-label">Chief Concern</span>
+              <span class="ehr-value" id="ehr-concern">—</span>
+            </div>
+            <div class="ehr-row">
+              <span class="ehr-label">Assessment</span>
+              <span class="ehr-value" id="ehr-assessment">—</span>
+            </div>
+            <div class="ehr-row">
+              <span class="ehr-label">Plan</span>
+              <span class="ehr-value" id="ehr-plan">—</span>
+            </div>
+          </div>
+          <div class="ehr-actions">
+            <button id="btn-download" class="btn-ehr-action">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v9m0 0L4 7m3 3l3-3M2 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Download PDF
+            </button>
+            <button id="btn-share" class="btn-ehr-action">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 5a2 2 0 100-4 2 2 0 000 4zM4 9a2 2 0 100-4 2 2 0 000 4zM10 13a2 2 0 100-4 2 2 0 000 4zM5.7 8.1l2.6 1.8M8.3 4.1L5.7 5.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              Share with provider
+            </button>
+          </div>
+        </div>
+
+        <!-- Session insights -->
+        <div class="insights-section">
+          <h3 class="insights-heading">Session Insights</h3>
+          <div class="insights-content" id="insights-content"></div>
+        </div>
+
+        <!-- Quick prompts -->
+        <div class="prompts-section">
+          <h3 class="prompts-heading">Ask Ash</h3>
+          <div class="prompts-list">
+            <button class="prompt-chip" data-prompt="What should I focus on before next session?">What should I focus on before next session?</button>
+            <button class="prompt-chip" data-prompt="What patterns did Ash notice?">What patterns did Ash notice?</button>
+            <button class="prompt-chip" data-prompt="Summarize my action items">Summarize my action items</button>
+            <button class="prompt-chip" data-prompt="How am I progressing?">How am I progressing?</button>
+          </div>
+        </div>
+
+        <!-- User input -->
+        <div class="input-section">
+          <div class="input-wrap">
+            <input type="text" id="user-question" class="user-input" placeholder="Ask Ash anything about your session..." />
+            <button id="btn-ask" class="btn-ask">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

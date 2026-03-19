@@ -8,22 +8,39 @@ let timerInterval = null;
 let elapsedSeconds = 0;
 let transcript = null;
 let activeTabId = null;
+let uploadedFiles = [];
+let thinkingInterval = null;
+
+// ─── DOM refs ────────────────────────────────────────────────────────────────
 
 const views = {
   idle:       document.getElementById("view-idle"),
   detected:   document.getElementById("view-detected"),
   recording:  document.getElementById("view-recording"),
   processing: document.getElementById("view-processing"),
-  ready:      document.getElementById("view-ready"),
+  context:    document.getElementById("view-context"),
+  summary:    document.getElementById("view-summary"),
 };
 
-const btnStart      = document.getElementById("btn-start");
-const btnDismiss    = document.getElementById("btn-dismiss");
-const btnStop       = document.getElementById("btn-stop");
-const btnOpenAsh    = document.getElementById("btn-open-ash");
-const recTimer      = document.getElementById("rec-timer");
-const speakerAssign = document.getElementById("speaker-assign");
-const readyActions  = document.getElementById("ready-actions");
+const $ = (id) => document.getElementById(id);
+
+const btnStart      = $("btn-start");
+const btnDismiss    = $("btn-dismiss");
+const btnStop       = $("btn-stop");
+const btnGenerate   = $("btn-generate");
+const btnSkip       = $("btn-skip");
+const startError    = $("start-error");
+const recTimer      = $("rec-timer");
+const chipToggle    = $("chip-toggle");
+const chipBody      = $("chip-body");
+const chipChevron   = $("chip-chevron");
+const chipTranscript = $("chip-transcript");
+const chipMeta      = $("chip-meta");
+const uploadArea    = $("upload-area");
+const fileInput     = $("file-input");
+const uploadedFilesEl = $("uploaded-files");
+const thinkingPhrase  = $("thinking-phrase");
+const thinkingBar     = $("thinking-bar");
 
 // ─── View management ─────────────────────────────────────────────────────────
 
@@ -31,6 +48,8 @@ function showView(name) {
   Object.entries(views).forEach(([key, el]) => {
     el.classList.toggle("active", key === name);
   });
+  if (name === "processing") startThinkingAnimation();
+  else stopThinkingAnimation();
 }
 
 // ─── Init: restore state on panel reopen ─────────────────────────────────────
@@ -51,16 +70,14 @@ async function init() {
     startTimer();
   } else if (state.sessionState === "processing") {
     showView("processing");
-  } else if (state.sessionState === "ready") {
+  } else if (state.sessionState === "context") {
     transcript = state.transcript;
-    showView("ready");
-    populateSpeakerPreviews(transcript);
-    // If user already assigned speaker previously, skip selection
-    const stored = await chrome.storage.sync.get("userSpeaker");
-    if (stored.userSpeaker) {
-      speakerAssign.style.display = "none";
-      readyActions.style.display = "flex";
-    }
+    showView("context");
+    populateContextView(transcript);
+  } else if (state.sessionState === "summary") {
+    transcript = state.transcript;
+    showView("summary");
+    populateSummaryView(transcript, state);
   }
 }
 init();
@@ -68,6 +85,7 @@ init();
 // ─── Button handlers ─────────────────────────────────────────────────────────
 
 btnStart.addEventListener("click", async () => {
+  startError.style.display = "none";
   if (!activeTabId) {
     const s = await chrome.storage.session.get("activeTabId");
     activeTabId = s.activeTabId;
@@ -82,29 +100,94 @@ btnDismiss.addEventListener("click", () => {
 
 btnStop.addEventListener("click", () => stopRecording());
 
-btnOpenAsh.addEventListener("click", () => {
-  chrome.tabs.create({ url: ASH_APP_URL });
+btnGenerate.addEventListener("click", () => generateSummary());
+btnSkip.addEventListener("click", () => generateSummary());
+
+// ─── Transcript chip expand/collapse ─────────────────────────────────────────
+
+chipToggle.addEventListener("click", () => {
+  const isOpen = chipBody.classList.toggle("open");
+  chipChevron.classList.toggle("open", isOpen);
 });
 
-// ─── Speaker selection ───────────────────────────────────────────────────────
+// ─── Speaker selection (inline) ──────────────────────────────────────────────
 
-document.querySelectorAll(".speaker-btn").forEach(btn => {
+document.querySelectorAll(".speaker-pill").forEach(btn => {
   btn.addEventListener("click", async () => {
-    document.querySelectorAll(".speaker-btn").forEach(b => b.classList.remove("selected"));
+    document.querySelectorAll(".speaker-pill").forEach(b => b.classList.remove("selected"));
     btn.classList.add("selected");
     const speaker = btn.dataset.speaker;
     await chrome.storage.sync.set({ userSpeaker: speaker });
     await chrome.storage.session.set({ userSpeaker: speaker });
-
-    // Brief delay for visual feedback, then show actions
-    setTimeout(() => {
-      speakerAssign.style.display = "none";
-      readyActions.style.display = "flex";
-    }, 200);
-
-    if (transcript) await pushTranscriptToAsh(transcript, speaker);
   });
 });
+
+// ─── File upload ─────────────────────────────────────────────────────────────
+
+uploadArea.addEventListener("click", () => fileInput.click());
+
+uploadArea.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  uploadArea.classList.add("drag-over");
+});
+uploadArea.addEventListener("dragleave", () => {
+  uploadArea.classList.remove("drag-over");
+});
+uploadArea.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadArea.classList.remove("drag-over");
+  handleFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener("change", (e) => {
+  handleFiles(e.target.files);
+  fileInput.value = "";
+});
+
+function handleFiles(fileList) {
+  for (const file of fileList) {
+    uploadedFiles.push(file);
+    renderFilePill(file, uploadedFiles.length - 1);
+  }
+}
+
+function renderFilePill(file, index) {
+  const pill = document.createElement("div");
+  pill.className = "file-pill";
+  pill.dataset.index = index;
+
+  const icon = getFileIcon(file.type);
+  const size = formatFileSize(file.size);
+
+  pill.innerHTML = `
+    <span class="file-pill-icon">${icon}</span>
+    <span class="file-pill-name">${file.name}</span>
+    <span class="file-pill-size">${size}</span>
+    <button class="file-pill-remove" data-index="${index}">&times;</button>
+  `;
+
+  pill.querySelector(".file-pill-remove").addEventListener("click", (e) => {
+    e.stopPropagation();
+    uploadedFiles[index] = null;
+    pill.remove();
+  });
+
+  uploadedFilesEl.appendChild(pill);
+}
+
+function getFileIcon(mimeType) {
+  if (mimeType.startsWith("image/")) return "🖼";
+  if (mimeType.startsWith("video/")) return "🎬";
+  if (mimeType.includes("pdf")) return "📄";
+  if (mimeType.includes("doc")) return "📝";
+  return "📎";
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
 
 // ─── Recording ───────────────────────────────────────────────────────────────
 
@@ -138,7 +221,7 @@ async function startRecording() {
       await handleAudioReady(new Blob(audioChunks, { type: "audio/webm" }));
     };
 
-    mediaRecorder.start(5000); // collect chunks every 5s
+    mediaRecorder.start(5000);
 
     const now = Date.now();
     await chrome.storage.session.set({ recordingStartedAt: now });
@@ -147,6 +230,13 @@ async function startRecording() {
     startTimer();
   } catch (err) {
     console.error("[Ash] Recording failed:", err);
+    if (err.message && (err.message.includes("invoked") || err.message.includes("activeTab"))) {
+      startError.style.display = "block";
+    } else {
+      startError.querySelector(".start-error-text").innerHTML =
+        `Could not start recording: ${err.message}`;
+      startError.style.display = "block";
+    }
   }
 }
 
@@ -179,11 +269,43 @@ function updateTimerDisplay() {
   recTimer.textContent = `${m}:${s}`;
 }
 
+// ─── Thinking animation ─────────────────────────────────────────────────────
+
+const THINKING_PHRASES = [
+  "finding insights",
+  "connecting dots",
+  "clearing the noise",
+  "separating speakers",
+  "understanding context",
+];
+
+function startThinkingAnimation() {
+  let phraseIndex = 0;
+  let progress = 0;
+  thinkingBar.style.width = "0%";
+
+  thinkingInterval = setInterval(() => {
+    phraseIndex = (phraseIndex + 1) % THINKING_PHRASES.length;
+    thinkingPhrase.classList.add("fade-out");
+    setTimeout(() => {
+      thinkingPhrase.textContent = THINKING_PHRASES[phraseIndex];
+      thinkingPhrase.classList.remove("fade-out");
+    }, 300);
+
+    progress = Math.min(progress + 15 + Math.random() * 10, 90);
+    thinkingBar.style.width = progress + "%";
+  }, 2500);
+}
+
+function stopThinkingAnimation() {
+  clearInterval(thinkingInterval);
+  thinkingInterval = null;
+}
+
 // ─── Transcription ───────────────────────────────────────────────────────────
 
 async function handleAudioReady(audioBlob) {
   try {
-    // Upload audio
     const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
       method: "POST",
       headers: { authorization: ASSEMBLYAI_API_KEY },
@@ -191,7 +313,6 @@ async function handleAudioReady(audioBlob) {
     });
     const { upload_url } = await uploadRes.json();
 
-    // Start transcription with speaker diarization
     const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
       method: "POST",
       headers: {
@@ -224,20 +345,23 @@ async function pollTranscription(jobId) {
 
     if (data.status === "completed") {
       transcript = data;
+      thinkingBar.style.width = "100%";
+
       await chrome.storage.session.set({
         transcript: data,
-        sessionState: "ready",
+        sessionState: "context",
       });
       chrome.runtime.sendMessage({ type: "TRANSCRIPT_READY", transcript: data });
-      showView("ready");
-      populateSpeakerPreviews(data);
 
-      // Auto-assign if user already selected speaker in a previous session
+      setTimeout(() => {
+        showView("context");
+        populateContextView(data);
+      }, 600);
+
       const stored = await chrome.storage.sync.get("userSpeaker");
       if (stored.userSpeaker) {
-        speakerAssign.style.display = "none";
-        readyActions.style.display = "flex";
-        await pushTranscriptToAsh(data, stored.userSpeaker);
+        const assignEl = $("speaker-assign-inline");
+        if (assignEl) assignEl.style.display = "none";
       }
     } else if (data.status === "error") {
       throw new Error(data.error);
@@ -248,22 +372,228 @@ async function pollTranscription(jobId) {
   await poll();
 }
 
-// ─── Speaker previews ────────────────────────────────────────────────────────
+// ─── Context view population ─────────────────────────────────────────────────
 
-function populateSpeakerPreviews(data) {
-  if (!data?.utterances) return;
-  const speakers = {};
-  data.utterances.forEach(u => {
-    if (!speakers[u.speaker]) {
-      speakers[u.speaker] = u.text.length > 50
-        ? u.text.slice(0, 50) + "…"
-        : u.text;
+function populateContextView(data) {
+  if (!data) return;
+
+  // Meta info
+  const speakerCount = new Set(data.utterances?.map(u => u.speaker) || []).size;
+  const durationMs = data.audio_duration ? data.audio_duration * 1000 : 0;
+  const durationMin = Math.round(durationMs / 60000);
+  chipMeta.textContent = `${speakerCount} speakers · ${durationMin} min`;
+
+  // Transcript content
+  chipTranscript.innerHTML = "";
+  if (data.utterances) {
+    data.utterances.slice(0, 20).forEach(u => {
+      const div = document.createElement("div");
+      div.className = "chip-utterance";
+      div.innerHTML = `<span class="chip-speaker">Speaker ${u.speaker}</span> ${u.text}`;
+      chipTranscript.appendChild(div);
+    });
+    if (data.utterances.length > 20) {
+      const more = document.createElement("div");
+      more.className = "chip-utterance";
+      more.style.opacity = "0.5";
+      more.textContent = `+ ${data.utterances.length - 20} more utterances`;
+      chipTranscript.appendChild(more);
+    }
+  }
+
+  // Auto-select speaker if previously chosen
+  chrome.storage.sync.get("userSpeaker").then(stored => {
+    if (stored.userSpeaker) {
+      const pill = document.querySelector(`.speaker-pill[data-speaker="${stored.userSpeaker}"]`);
+      if (pill) pill.classList.add("selected");
+      $("speaker-assign-inline").style.display = "none";
     }
   });
-  const pA = document.getElementById("preview-A");
-  const pB = document.getElementById("preview-B");
-  if (pA) pA.textContent = speakers["A"] || "";
-  if (pB) pB.textContent = speakers["B"] || "";
+}
+
+// ─── Generate summary ────────────────────────────────────────────────────────
+
+async function generateSummary() {
+  // Show thinking briefly
+  showView("processing");
+  thinkingBar.style.width = "0%";
+
+  // Push transcript to Ash backend
+  const stored = await chrome.storage.sync.get("userSpeaker");
+  if (transcript && stored.userSpeaker) {
+    await pushTranscriptToAsh(transcript, stored.userSpeaker);
+  }
+
+  // Simulate processing then show summary
+  let progress = 0;
+  const progressInterval = setInterval(() => {
+    progress = Math.min(progress + 20, 100);
+    thinkingBar.style.width = progress + "%";
+    if (progress >= 100) {
+      clearInterval(progressInterval);
+      setTimeout(() => {
+        chrome.storage.session.set({ sessionState: "summary" });
+        chrome.runtime.sendMessage({ type: "SET_STATE", state: "summary" });
+        showView("summary");
+        populateSummaryView(transcript, {});
+      }, 400);
+    }
+  }, 500);
+}
+
+function populateSummaryView(data, state) {
+  if (!data) return;
+
+  // EHR fields
+  const dateEl = $("ehr-date");
+  const durationEl = $("ehr-duration");
+  const concernEl = $("ehr-concern");
+  const assessmentEl = $("ehr-assessment");
+  const planEl = $("ehr-plan");
+
+  const recordedAt = state?.recordingStartedAt
+    ? new Date(state.recordingStartedAt)
+    : new Date();
+  dateEl.textContent = recordedAt.toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+
+  const durationMin = data.audio_duration
+    ? Math.round(data.audio_duration / 60)
+    : elapsedSeconds
+      ? Math.round(elapsedSeconds / 60)
+      : 0;
+  durationEl.textContent = `${durationMin} minutes`;
+
+  // Extract first meaningful utterance as chief concern
+  const firstUtterance = data.utterances?.[0]?.text || data.text?.slice(0, 120) || "—";
+  concernEl.textContent = firstUtterance.length > 100
+    ? firstUtterance.slice(0, 100) + "..."
+    : firstUtterance;
+
+  assessmentEl.textContent = "Patient engaged in open dialogue. Active participation noted throughout the session.";
+  planEl.textContent = "Continue current treatment plan. Follow-up session recommended.";
+
+  // Insights
+  const insightsEl = $("insights-content");
+  insightsEl.innerHTML = "";
+
+  const insights = extractInsights(data);
+  insights.forEach(insight => {
+    const block = document.createElement("div");
+    block.className = "insight-block";
+    block.innerHTML = `
+      <div class="insight-label">${insight.label}</div>
+      <div class="insight-text">${insight.text}</div>
+    `;
+    insightsEl.appendChild(block);
+  });
+
+  // EHR action handlers
+  $("btn-download").addEventListener("click", () => downloadEHR(data, recordedAt, durationMin));
+  $("btn-share").addEventListener("click", () => shareEHR());
+}
+
+function extractInsights(data) {
+  const insights = [];
+  const utterances = data.utterances || [];
+  const speakers = new Set(utterances.map(u => u.speaker));
+  const speakerTimes = {};
+
+  utterances.forEach(u => {
+    if (!speakerTimes[u.speaker]) speakerTimes[u.speaker] = 0;
+    speakerTimes[u.speaker] += (u.end - u.start);
+  });
+
+  insights.push({
+    label: "Session Overview",
+    text: `${utterances.length} exchanges between ${speakers.size} participants. The conversation covered multiple topics over the course of the session.`,
+  });
+
+  if (speakers.size === 2) {
+    const [spA, spB] = [...speakers];
+    const pctA = Math.round((speakerTimes[spA] / (speakerTimes[spA] + speakerTimes[spB])) * 100);
+    insights.push({
+      label: "Speaking Balance",
+      text: `Speaker ${spA} spoke ${pctA}% of the time, Speaker ${spB} spoke ${100 - pctA}%. ${pctA > 60 ? "One speaker dominated the conversation." : "Balanced dialogue observed."}`,
+    });
+  }
+
+  if (data.text && data.text.length > 200) {
+    const wordCount = data.text.split(/\s+/).length;
+    insights.push({
+      label: "Content Depth",
+      text: `${wordCount} words exchanged. The session covered substantive ground with detailed discussion.`,
+    });
+  }
+
+  return insights;
+}
+
+// ─── EHR download ────────────────────────────────────────────────────────────
+
+function downloadEHR(data, date, duration) {
+  const ehrText = [
+    "═══════════════════════════════════════════",
+    "          ASH WITH EXPERTS — SESSION RECORD",
+    "═══════════════════════════════════════════",
+    "",
+    `Date:           ${date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
+    `Duration:       ${duration} minutes`,
+    `Session Type:   Individual Therapy`,
+    `Chief Concern:  ${$("ehr-concern").textContent}`,
+    `Assessment:     ${$("ehr-assessment").textContent}`,
+    `Plan:           ${$("ehr-plan").textContent}`,
+    "",
+    "───────────────────────────────────────────",
+    "TRANSCRIPT",
+    "───────────────────────────────────────────",
+    "",
+    ...(data.utterances || []).map(u => `[Speaker ${u.speaker}] ${u.text}`),
+    "",
+    "═══════════════════════════════════════════",
+    "Generated by Ash with Experts",
+  ].join("\n");
+
+  const blob = new Blob([ehrText], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ash-session-${date.toISOString().slice(0, 10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function shareEHR() {
+  // Placeholder — could open email compose or share sheet
+  const email = prompt("Enter provider's email address:");
+  if (email) {
+    alert(`Sharing session record with ${email}.\n\n(This feature will be fully implemented with the Ash backend.)`);
+  }
+}
+
+// ─── Prompt chips ────────────────────────────────────────────────────────────
+
+document.querySelectorAll(".prompt-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    const input = $("user-question");
+    input.value = chip.dataset.prompt;
+    input.focus();
+  });
+});
+
+$("btn-ask")?.addEventListener("click", handleUserQuestion);
+$("user-question")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") handleUserQuestion();
+});
+
+function handleUserQuestion() {
+  const input = $("user-question");
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = "";
+  // Placeholder — would send to AI backend
+  alert(`Ash received your question:\n"${question}"\n\n(AI responses will be implemented with the Ash backend.)`);
 }
 
 // ─── Push to Ash backend ─────────────────────────────────────────────────────
@@ -287,7 +617,6 @@ async function pushTranscriptToAsh(data, userSpeaker) {
       }),
     });
     const result = await res.json();
-    // Store sessionId so "Open in Ash" can link directly
     if (result.sessionId) {
       await chrome.storage.session.set({ ashSessionId: result.sessionId });
     }
@@ -315,8 +644,8 @@ chrome.runtime.onMessage.addListener((message) => {
       break;
     case "TRANSCRIPT_READY":
       transcript = message.transcript;
-      showView("ready");
-      populateSpeakerPreviews(message.transcript);
+      showView("context");
+      populateContextView(message.transcript);
       break;
   }
 });
