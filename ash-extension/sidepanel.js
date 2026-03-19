@@ -48,8 +48,13 @@ function showView(name) {
   Object.entries(views).forEach(([key, el]) => {
     el.classList.toggle("active", key === name);
   });
-  if (name === "processing") startThinkingAnimation();
-  else stopThinkingAnimation();
+  if (name === "processing") {
+    startThinkingAnimation();
+    showSkipAfterDelay();
+  } else {
+    stopThinkingAnimation();
+    if (btnSkipProcessing) btnSkipProcessing.style.opacity = "0";
+  }
 }
 
 // ─── Init: restore state on panel reopen ─────────────────────────────────────
@@ -81,6 +86,43 @@ async function init() {
   }
 }
 init();
+
+// ─── Skip processing (demo mode) ─────────────────────────────────────────────
+
+const btnSkipProcessing = $("btn-skip-processing");
+// Show skip button after 5 seconds of processing
+function showSkipAfterDelay() {
+  setTimeout(() => {
+    if (btnSkipProcessing) btnSkipProcessing.style.opacity = "1";
+  }, 5000);
+}
+
+btnSkipProcessing?.addEventListener("click", () => {
+  const mock = buildMockTranscript();
+  transcript = mock;
+  chrome.storage.session.set({ transcript: mock, sessionState: "context" });
+  chrome.runtime.sendMessage({ type: "TRANSCRIPT_READY", transcript: mock });
+  showView("context");
+  populateContextView(mock);
+});
+
+function buildMockTranscript() {
+  const dur = elapsedSeconds || 300;
+  return {
+    audio_duration: dur,
+    text: "This is a demo transcript. In a real session, Ash would capture and transcribe your full conversation with speaker diarization. The transcript would appear here with each speaker's words clearly separated.",
+    utterances: [
+      { speaker: "A", text: "How have you been feeling since our last session?", start: 0, end: 5000 },
+      { speaker: "B", text: "I've been doing better overall. The breathing exercises have been helping with my anxiety, especially in the mornings.", start: 5500, end: 14000 },
+      { speaker: "A", text: "That's great to hear. Can you tell me more about your morning routine now?", start: 15000, end: 20000 },
+      { speaker: "B", text: "I wake up, do five minutes of deep breathing before checking my phone. It's made a real difference in how I start my day.", start: 21000, end: 30000 },
+      { speaker: "A", text: "That's a really positive change. How about the sleep issues we discussed?", start: 31000, end: 36000 },
+      { speaker: "B", text: "Sleep has improved too. I'm falling asleep faster and not waking up as much during the night. Maybe once instead of three or four times.", start: 37000, end: 48000 },
+      { speaker: "A", text: "Wonderful progress. Let's talk about what you'd like to focus on going forward.", start: 49000, end: 55000 },
+      { speaker: "B", text: "I think I'd like to work on my relationship with my family. There's been some tension and I want to communicate better.", start: 56000, end: 66000 },
+    ],
+  };
+}
 
 // ─── Button handlers ─────────────────────────────────────────────────────────
 
