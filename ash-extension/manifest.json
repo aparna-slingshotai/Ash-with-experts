@@ -5,8 +5,6 @@
   "description": "Ash silently captures your therapy session and builds your context window automatically.",
 
   "permissions": [
-    "tabCapture",
-    "activeTab",
     "tabs",
     "storage",
     "sidePanel",
