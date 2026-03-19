@@ -193,21 +193,18 @@ function formatFileSize(bytes) {
 
 async function startRecording() {
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: "START_RECORDING",
-      tabId: activeTabId,
+    // Use getDisplayMedia — user selects the meeting tab to share audio
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+      video: true,
     });
-    if (!response.success) throw new Error(response.error);
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        mandatory: {
-          chromeMediaSource: "tab",
-          chromeMediaSourceId: response.streamId,
-        },
-      },
-      video: false,
-    });
+    // Only need audio — stop video tracks immediately
+    stream.getVideoTracks().forEach(t => t.stop());
+
+    if (stream.getAudioTracks().length === 0) {
+      throw new Error("No audio captured. Make sure to share a tab with audio enabled.");
+    }
 
     audioChunks = [];
     mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
@@ -230,13 +227,14 @@ async function startRecording() {
     startTimer();
   } catch (err) {
     console.error("[Ash] Recording failed:", err);
-    if (err.message && (err.message.includes("invoked") || err.message.includes("activeTab"))) {
-      startError.style.display = "block";
+    if (err.name === "NotAllowedError") {
+      startError.querySelector(".start-error-text").innerHTML =
+        "Recording cancelled. Click <strong>Start Session</strong> again and select the meeting tab to share.";
     } else {
       startError.querySelector(".start-error-text").innerHTML =
         `Could not start recording: ${err.message}`;
-      startError.style.display = "block";
     }
+    startError.style.display = "block";
   }
 }
 

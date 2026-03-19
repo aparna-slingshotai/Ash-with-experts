@@ -13,27 +13,17 @@ const STATES = {
 let sessionState = STATES.IDLE;
 let activeTabId = null;
 
-// ── Clicking the extension icon grants activeTab and opens panel ─────────────
+// ── Clicking the extension icon opens the side panel ─────────────────────────
 chrome.action.onClicked.addListener(async (tab) => {
   const isCall = CALL_URL_PATTERNS.some(p => p.test(tab.url));
   if (isCall && sessionState === STATES.IDLE) {
-    sessionState = STATES.DETECTED;
-    activeTabId = tab.id;
-    await chrome.storage.session.set({
-      sessionState: STATES.DETECTED,
-      activeTabId: tab.id,
-      meetingUrl: tab.url,
-      startTime: Date.now(),
-    });
-  }
-  await chrome.sidePanel.open({ tabId: tab.id });
-  chrome.action.setBadgeText({ text: "" });
-  if (sessionState === STATES.DETECTED) {
-    broadcastToSidePanel({ type: "MEETING_DETECTED", tabId: activeTabId, url: tab.url });
+    await handleMeetingDetected(tab.id, tab);
+  } else {
+    await chrome.sidePanel.open({ tabId: tab.id });
   }
 });
 
-// ── Tab monitoring — detect call but DON'T auto-open panel ───────────────────
+// ── Tab monitoring ────────────────────────────────────────────────────────────
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== "complete" || !tab.url) return;
   const isCall = CALL_URL_PATTERNS.some(p => p.test(tab.url));
@@ -54,14 +44,13 @@ async function handleMeetingDetected(tabId, tab) {
     meetingUrl: tab.url,
     startTime: Date.now(),
   });
-  // Show badge instead of auto-opening panel — user must click icon to grant activeTab
-  chrome.action.setBadgeText({ text: "●" });
-  chrome.action.setBadgeBackgroundColor({ color: "#855074" });
+  await chrome.sidePanel.open({ tabId });
+  broadcastToSidePanel({ type: "MEETING_DETECTED", tabId, url: tab.url });
   chrome.notifications.create("ash-detected", {
     type: "basic", iconUrl: "icons/icon48.png",
     title: "Ash is with you",
-    message: "Click the Ash icon to start recording.",
-    priority: 1,
+    message: "Session detected.",
+    priority: 0, silent: true,
   });
 }
 
@@ -81,16 +70,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (tab) chrome.sidePanel.open({ tabId: tab.id });
       });
       break;
-
-    case "START_RECORDING":
-      chrome.tabCapture.getMediaStreamId({ targetTabId: message.tabId }, (streamId) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ success: false, error: chrome.runtime.lastError.message });
-        } else {
-          sendResponse({ success: true, streamId });
-        }
-      });
-      return true;
 
     case "RECORDING_STARTED":
       sessionState = STATES.RECORDING;
