@@ -907,6 +907,14 @@ html, body {
   color: var(--text-primary);
 }
 
+.btn-ghost.demo-btn {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  height: 36px;
+}
+
 .btn-end {
   width: 100%;
   height: 56px;

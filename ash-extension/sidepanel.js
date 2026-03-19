@@ -140,6 +140,30 @@ btnDismiss.addEventListener("click", () => {
   chrome.storage.session.set({ sessionState: "idle" });
 });
 
+// Demo button: go through processing → context with mock data
+$("btn-demo")?.addEventListener("click", () => {
+  startError.style.display = "none";
+  showView("processing");
+  chrome.storage.session.set({ sessionState: "processing" });
+
+  // Brief processing animation (2.5 seconds), then show context dashboard
+  let progress = 0;
+  const demoInterval = setInterval(() => {
+    progress = Math.min(progress + 25, 100);
+    thinkingBar.style.width = progress + "%";
+    if (progress >= 100) {
+      clearInterval(demoInterval);
+      setTimeout(() => {
+        const mock = buildMockTranscript();
+        transcript = mock;
+        chrome.storage.session.set({ transcript: mock, sessionState: "context" });
+        showView("context");
+        populateContextView(mock);
+      }, 500);
+    }
+  }, 500);
+});
+
 btnStop.addEventListener("click", () => stopRecording());
 
 btnGenerate.addEventListener("click", () => generateSummary());
@@ -271,7 +295,10 @@ async function startRecording() {
     console.error("[Ash] Recording failed:", err);
     if (err.name === "NotAllowedError") {
       startError.querySelector(".start-error-text").innerHTML =
-        "Recording cancelled. Click <strong>Start Session</strong> again and select the meeting tab to share.";
+        'Recording cancelled. Click <strong>Start Session</strong> again and select the meeting tab to share.';
+    } else if (err.name === "NotSupportedError" || err.message?.includes("audio")) {
+      startError.querySelector(".start-error-text").innerHTML =
+        'Could not access tab audio. Try opening this panel from your <strong>meeting tab</strong>, then click Start Session.';
     } else {
       startError.querySelector(".start-error-text").innerHTML =
         `Could not start recording: ${err.message}`;
