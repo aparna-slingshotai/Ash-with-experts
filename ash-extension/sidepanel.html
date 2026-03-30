@@ -212,6 +212,231 @@
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════════════════════════════════════
+         DEBRIEF FLOW
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Debrief: Notification / Trigger ────────────────────────────────── -->
+    <div id="view-debrief-notify" class="view">
+      <div class="debrief-center">
+        <div class="ash-mark large">✦</div>
+        <h2 class="debrief-title">How was your session?</h2>
+        <p class="debrief-sub">Ash noticed you had a therapy session. Want to debrief while it's fresh?</p>
+        <button id="btn-debrief-start" class="btn-primary">Let's debrief</button>
+        <button id="btn-debrief-dismiss" class="btn-ghost">Not right now</button>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Choose Mode ──────────────────────────────────────────── -->
+    <div id="view-debrief-choose" class="view">
+      <div class="debrief-choose-scroll">
+        <div class="debrief-choose-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-title">How do you want to start?</h2>
+          <p class="debrief-sub">Choose what feels right for you.</p>
+        </div>
+        <div class="debrief-options">
+          <button id="btn-choose-questionnaire" class="debrief-option-card">
+            <div class="debrief-option-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+            <div class="debrief-option-text">
+              <span class="debrief-option-label">Quick questionnaire first</span>
+              <span class="debrief-option-desc">Ash will ask a few guided questions before you vent</span>
+            </div>
+          </button>
+          <button id="btn-choose-vent" class="debrief-option-card">
+            <div class="debrief-option-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" stroke="currentColor" stroke-width="1.5"/><path d="M19 10v2a7 7 0 01-14 0v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 19v4m-4 0h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+            <div class="debrief-option-text">
+              <span class="debrief-option-label">Go straight to venting</span>
+              <span class="debrief-option-desc">Talk freely like a voice note — Ash will listen</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Venting (recording) ──────────────────────────────────── -->
+    <div id="view-debrief-venting" class="view">
+      <div class="debrief-venting-header">
+        <span class="rec-dot" style="background: var(--primary)"></span>
+        <span class="rec-label" style="color: var(--primary)">Listening</span>
+        <span id="debrief-vent-timer" class="rec-timer">00:00</span>
+      </div>
+      <div class="debrief-venting-body">
+        <div class="recording-visual">
+          <div class="waveform debrief-wave">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <p class="debrief-venting-hint">Let it out — Ash is here</p>
+        <p class="debrief-venting-sub">Talk about how the session went, what came up, how you're feeling. No structure needed.</p>
+      </div>
+      <div class="debrief-venting-footer">
+        <button id="btn-vent-done" class="btn-primary">I'm done venting</button>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Venting Complete + Upload ────────────────────────────── -->
+    <div id="view-debrief-vent-done" class="view">
+      <div class="debrief-vent-done-scroll">
+        <div class="debrief-choose-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-title">Got it</h2>
+          <p class="debrief-sub">Thanks for sharing. Anything else you want to add?</p>
+        </div>
+
+        <div class="upload-section">
+          <h3 class="upload-title">Additional context</h3>
+          <p class="upload-sub">Upload pictures, transcripts, or documents from your session.</p>
+          <div class="upload-area" id="debrief-upload-area">
+            <div class="upload-area-inner">
+              <span class="upload-plus">+</span>
+              <span class="upload-text">Drop files or click to upload</span>
+            </div>
+          </div>
+          <input type="file" id="debrief-file-input" multiple style="display:none" />
+          <div class="uploaded-files" id="debrief-uploaded-files"></div>
+        </div>
+
+        <div class="context-actions">
+          <button id="btn-vent-continue" class="btn-primary">Continue ✦</button>
+          <button id="btn-vent-skip-upload" class="btn-ghost">Skip — nothing to add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Questionnaire (interactive Q&A) ──────────────────────── -->
+    <div id="view-debrief-questionnaire" class="view">
+      <div class="debrief-q-scroll">
+        <div class="debrief-q-header">
+          <div class="ash-mark small">✦</div>
+          <p class="debrief-q-intro">Let me ask you a few things before we can talk about it.</p>
+        </div>
+
+        <div class="debrief-q-conversation" id="debrief-q-conversation">
+          <!-- Questions and answers rendered dynamically -->
+        </div>
+
+        <div class="debrief-q-input-area" id="debrief-q-input-area">
+          <div class="debrief-q-options" id="debrief-q-options">
+            <!-- Dynamic answer options -->
+          </div>
+          <div class="debrief-q-freetext" id="debrief-q-freetext" style="display:none">
+            <div class="input-wrap">
+              <input type="text" id="debrief-q-input" class="user-input" placeholder="Type your answer..." />
+              <button id="btn-debrief-q-send" class="btn-ask">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Ash Processing Insight ────────────────────────────────── -->
+    <div id="view-debrief-processing" class="view">
+      <div class="processing-center">
+        <div class="ash-mark thinking">✦</div>
+        <div class="thinking-text">
+          <span id="debrief-thinking-phrase" class="thinking-phrase">forming insight</span>
+          <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+        <div class="thinking-progress">
+          <div class="thinking-bar" id="debrief-thinking-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Insight + Psychology Breakdown ────────────────────────── -->
+    <div id="view-debrief-insight" class="view">
+      <div class="debrief-insight-scroll">
+        <div class="debrief-choose-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-title">Here's what I picked up on</h2>
+        </div>
+
+        <div id="debrief-insight-content" class="debrief-insight-content">
+          <!-- Dynamically rendered insight blocks -->
+        </div>
+
+        <div id="debrief-psych-breakdown" class="debrief-psych-section" style="display:none">
+          <h3 class="debrief-psych-heading">What this means</h3>
+          <div id="debrief-psych-content" class="debrief-psych-content">
+            <!-- Psychology term breakdowns -->
+          </div>
+        </div>
+
+        <div class="context-actions" style="padding-top:16px">
+          <button id="btn-insight-continue" class="btn-primary">Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Memory Confirmation (toggles) ────────────────────────── -->
+    <div id="view-debrief-memory" class="view">
+      <div class="debrief-memory-scroll">
+        <div class="debrief-choose-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-title">What should I remember?</h2>
+          <p class="debrief-sub">Toggle what you'd like Ash to keep from this debrief.</p>
+        </div>
+
+        <div class="debrief-memory-toggles">
+          <label class="debrief-toggle-row">
+            <div class="debrief-toggle-info">
+              <span class="debrief-toggle-label">Debrief session</span>
+              <span class="debrief-toggle-desc">The full session and what was discussed</span>
+            </div>
+            <div class="debrief-switch">
+              <input type="checkbox" id="mem-session" class="debrief-switch-input" checked />
+              <span class="debrief-switch-slider"></span>
+            </div>
+          </label>
+
+          <label class="debrief-toggle-row">
+            <div class="debrief-toggle-info">
+              <span class="debrief-toggle-label">Your answers</span>
+              <span class="debrief-toggle-desc">Your responses to Ash's questions</span>
+            </div>
+            <div class="debrief-switch">
+              <input type="checkbox" id="mem-answers" class="debrief-switch-input" checked />
+              <span class="debrief-switch-slider"></span>
+            </div>
+          </label>
+
+          <label class="debrief-toggle-row">
+            <div class="debrief-toggle-info">
+              <span class="debrief-toggle-label">Insight generated</span>
+              <span class="debrief-toggle-desc">The patterns and observations Ash found</span>
+            </div>
+            <div class="debrief-switch">
+              <input type="checkbox" id="mem-insight" class="debrief-switch-input" checked />
+              <span class="debrief-switch-slider"></span>
+            </div>
+          </label>
+        </div>
+
+        <div class="context-actions" style="padding-top: 16px">
+          <button id="btn-memory-save" class="btn-primary">Save & continue</button>
+          <button id="btn-memory-none" class="btn-ghost">Don't remember anything</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Complete ──────────────────────────────────────────────── -->
+    <div id="view-debrief-complete" class="view">
+      <div class="debrief-center">
+        <div class="ash-mark large">✦</div>
+        <h2 class="debrief-title" id="debrief-complete-title">I'll remember this</h2>
+        <p class="debrief-sub" id="debrief-complete-sub">I'm gonna remember this for if/when you bring it up in our convo.</p>
+        <p class="debrief-duration-badge" id="debrief-duration-badge"></p>
+        <button id="btn-debrief-to-chat" class="btn-primary">Go to Ash chat</button>
+      </div>
+    </div>
+
   </div>
 
   <script src="sidepanel.js"></script>

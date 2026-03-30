@@ -714,5 +714,496 @@ chrome.runtime.onMessage.addListener((message) => {
       showView("context");
       populateContextView(message.transcript);
       break;
+    case "THERAPY_SESSION_ENDED":
+      showView("debrief-notify");
+      break;
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEBRIEF FLOW
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const debriefState = {
+  startedAt: null,
+  mode: null,        // "questionnaire" | "vent"
+  ventText: null,
+  answers: [],
+  insight: null,
+  memory: { session: true, answers: true, insight: true },
+  questionIndex: 0,
+  uploadedFiles: [],
+};
+
+// Register debrief views
+views["debrief-notify"]       = $("view-debrief-notify");
+views["debrief-choose"]       = $("view-debrief-choose");
+views["debrief-venting"]      = $("view-debrief-venting");
+views["debrief-vent-done"]    = $("view-debrief-vent-done");
+views["debrief-questionnaire"] = $("view-debrief-questionnaire");
+views["debrief-processing"]   = $("view-debrief-processing");
+views["debrief-insight"]      = $("view-debrief-insight");
+views["debrief-memory"]       = $("view-debrief-memory");
+views["debrief-complete"]     = $("view-debrief-complete");
+
+// ─── Debrief questionnaire data ─────────────────────────────────────────────
+
+const DEBRIEF_QUESTIONS = [
+  {
+    text: "How are you feeling right now, after the session?",
+    type: "options",
+    options: ["Lighter", "Heavy", "Confused", "Hopeful", "Numb", "Something else"],
+  },
+  {
+    text: "Did anything your therapist said surprise you or stick with you?",
+    type: "freetext",
+  },
+  {
+    text: "Was there something you wanted to say but didn't?",
+    type: "options",
+    options: ["Yes, there was", "No, I said everything", "I'm not sure"],
+  },
+  {
+    text: "If yes — what was it? If not, what felt most important about today?",
+    type: "freetext",
+  },
+  {
+    text: "On a scale of 1-5, how present did you feel during the session?",
+    type: "options",
+    options: ["1 — Checked out", "2 — Distracted", "3 — In and out", "4 — Mostly present", "5 — Fully there"],
+  },
+];
+
+// ─── Debrief venting timer ──────────────────────────────────────────────────
+
+let debriefVentTimer = null;
+let debriefVentSeconds = 0;
+
+function startDebriefVentTimer() {
+  debriefVentSeconds = 0;
+  updateDebriefVentDisplay();
+  debriefVentTimer = setInterval(() => {
+    debriefVentSeconds++;
+    updateDebriefVentDisplay();
+  }, 1000);
+}
+
+function stopDebriefVentTimer() {
+  clearInterval(debriefVentTimer);
+  debriefVentTimer = null;
+}
+
+function updateDebriefVentDisplay() {
+  const el = $("debrief-vent-timer");
+  if (!el) return;
+  const m = String(Math.floor(debriefVentSeconds / 60)).padStart(2, "0");
+  const s = String(debriefVentSeconds % 60).padStart(2, "0");
+  el.textContent = `${m}:${s}`;
+}
+
+// ─── Debrief notification trigger ───────────────────────────────────────────
+
+// Manual entry: add "debrief" to idle view
+const idleView = $("view-idle");
+if (idleView) {
+  const debriefBtn = document.createElement("button");
+  debriefBtn.className = "btn-ghost";
+  debriefBtn.textContent = "Debrief a session";
+  debriefBtn.style.marginTop = "8px";
+  debriefBtn.addEventListener("click", () => {
+    debriefState.startedAt = Date.now();
+    showView("debrief-notify");
+  });
+  idleView.querySelector(".idle-center").appendChild(debriefBtn);
+}
+
+// ─── Button: Start debrief ──────────────────────────────────────────────────
+
+$("btn-debrief-start")?.addEventListener("click", () => {
+  debriefState.startedAt = debriefState.startedAt || Date.now();
+  showView("debrief-choose");
+});
+
+$("btn-debrief-dismiss")?.addEventListener("click", () => {
+  showView("idle");
+});
+
+// ─── Button: Choose mode ────────────────────────────────────────────────────
+
+$("btn-choose-questionnaire")?.addEventListener("click", () => {
+  debriefState.mode = "questionnaire";
+  debriefState.questionIndex = 0;
+  debriefState.answers = [];
+  showView("debrief-questionnaire");
+  renderDebriefQuestion();
+});
+
+$("btn-choose-vent")?.addEventListener("click", () => {
+  debriefState.mode = "vent";
+  showView("debrief-venting");
+  startDebriefVentTimer();
+});
+
+// ─── Venting flow ───────────────────────────────────────────────────────────
+
+$("btn-vent-done")?.addEventListener("click", () => {
+  stopDebriefVentTimer();
+  showView("debrief-vent-done");
+});
+
+// Debrief upload area
+const debriefUploadArea = $("debrief-upload-area");
+const debriefFileInput = $("debrief-file-input");
+const debriefUploadedFilesEl = $("debrief-uploaded-files");
+
+debriefUploadArea?.addEventListener("click", () => debriefFileInput?.click());
+debriefUploadArea?.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  debriefUploadArea.classList.add("drag-over");
+});
+debriefUploadArea?.addEventListener("dragleave", () => {
+  debriefUploadArea.classList.remove("drag-over");
+});
+debriefUploadArea?.addEventListener("drop", (e) => {
+  e.preventDefault();
+  debriefUploadArea.classList.remove("drag-over");
+  handleDebriefFiles(e.dataTransfer.files);
+});
+debriefFileInput?.addEventListener("change", (e) => {
+  handleDebriefFiles(e.target.files);
+  debriefFileInput.value = "";
+});
+
+function handleDebriefFiles(fileList) {
+  for (const file of fileList) {
+    debriefState.uploadedFiles.push(file);
+    const pill = document.createElement("div");
+    pill.className = "file-pill";
+    const icon = getFileIcon(file.type);
+    const size = formatFileSize(file.size);
+    pill.innerHTML = `
+      <span class="file-pill-icon">${icon}</span>
+      <span class="file-pill-name">${file.name}</span>
+      <span class="file-pill-size">${size}</span>
+      <button class="file-pill-remove">&times;</button>
+    `;
+    pill.querySelector(".file-pill-remove").addEventListener("click", (e) => {
+      e.stopPropagation();
+      pill.remove();
+    });
+    debriefUploadedFilesEl?.appendChild(pill);
+  }
+}
+
+$("btn-vent-continue")?.addEventListener("click", () => {
+  // After venting + upload, go to questionnaire
+  debriefState.questionIndex = 0;
+  debriefState.answers = [];
+  showView("debrief-questionnaire");
+  renderDebriefQuestion();
+});
+
+$("btn-vent-skip-upload")?.addEventListener("click", () => {
+  debriefState.questionIndex = 0;
+  debriefState.answers = [];
+  showView("debrief-questionnaire");
+  renderDebriefQuestion();
+});
+
+// ─── Questionnaire flow ─────────────────────────────────────────────────────
+
+function renderDebriefQuestion() {
+  const q = DEBRIEF_QUESTIONS[debriefState.questionIndex];
+  if (!q) {
+    // All questions done → processing
+    showDebriefProcessing();
+    return;
+  }
+
+  const convo = $("debrief-q-conversation");
+  const optionsEl = $("debrief-q-options");
+  const freetextEl = $("debrief-q-freetext");
+
+  // Add question bubble
+  const bubble = document.createElement("div");
+  bubble.className = "debrief-q-bubble ash";
+  bubble.textContent = q.text;
+  convo.appendChild(bubble);
+
+  // Scroll to bottom
+  const scroll = document.querySelector(".debrief-q-scroll");
+  setTimeout(() => scroll.scrollTop = scroll.scrollHeight, 50);
+
+  // Show appropriate input
+  optionsEl.innerHTML = "";
+  if (q.type === "options") {
+    freetextEl.style.display = "none";
+    optionsEl.style.display = "flex";
+    q.options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.className = "debrief-q-option-btn";
+      btn.textContent = opt;
+      btn.addEventListener("click", () => handleDebriefAnswer(opt));
+      optionsEl.appendChild(btn);
+    });
+  } else {
+    optionsEl.style.display = "none";
+    freetextEl.style.display = "block";
+    const input = $("debrief-q-input");
+    input.value = "";
+    input.focus();
+  }
+}
+
+function handleDebriefAnswer(answer) {
+  const convo = $("debrief-q-conversation");
+
+  // Add user answer bubble
+  const bubble = document.createElement("div");
+  bubble.className = "debrief-q-bubble user";
+  bubble.textContent = answer;
+  convo.appendChild(bubble);
+
+  debriefState.answers.push({
+    question: DEBRIEF_QUESTIONS[debriefState.questionIndex].text,
+    answer: answer,
+  });
+
+  debriefState.questionIndex++;
+
+  // Small delay before next question
+  setTimeout(() => renderDebriefQuestion(), 600);
+}
+
+// Freetext submit
+$("btn-debrief-q-send")?.addEventListener("click", () => {
+  const input = $("debrief-q-input");
+  const val = input.value.trim();
+  if (!val) return;
+  handleDebriefAnswer(val);
+  input.value = "";
+});
+
+$("debrief-q-input")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const val = e.target.value.trim();
+    if (!val) return;
+    handleDebriefAnswer(val);
+    e.target.value = "";
+  }
+});
+
+// ─── Debrief processing (fake insight generation) ───────────────────────────
+
+const DEBRIEF_THINKING_PHRASES = [
+  "forming insight",
+  "connecting the dots",
+  "reflecting on your words",
+  "finding patterns",
+  "understanding context",
+];
+
+let debriefThinkingInterval = null;
+
+function showDebriefProcessing() {
+  showView("debrief-processing");
+
+  const bar = $("debrief-thinking-bar");
+  const phrase = $("debrief-thinking-phrase");
+  let progress = 0;
+  let phraseIdx = 0;
+  bar.style.width = "0%";
+
+  debriefThinkingInterval = setInterval(() => {
+    phraseIdx = (phraseIdx + 1) % DEBRIEF_THINKING_PHRASES.length;
+    phrase.classList.add("fade-out");
+    setTimeout(() => {
+      phrase.textContent = DEBRIEF_THINKING_PHRASES[phraseIdx];
+      phrase.classList.remove("fade-out");
+    }, 300);
+
+    progress = Math.min(progress + 20 + Math.random() * 15, 100);
+    bar.style.width = progress + "%";
+
+    if (progress >= 100) {
+      clearInterval(debriefThinkingInterval);
+      setTimeout(() => {
+        showDebriefInsight();
+      }, 500);
+    }
+  }, 1200);
+}
+
+// ─── Insight generation (mock) ──────────────────────────────────────────────
+
+function showDebriefInsight() {
+  showView("debrief-insight");
+
+  const contentEl = $("debrief-insight-content");
+  const psychEl = $("debrief-psych-breakdown");
+  const psychContentEl = $("debrief-psych-content");
+
+  contentEl.innerHTML = "";
+  psychContentEl.innerHTML = "";
+
+  // Generate mock insights based on answers
+  const feeling = debriefState.answers[0]?.answer || "reflective";
+  const stuckWith = debriefState.answers[1]?.answer || "";
+  const unsaid = debriefState.answers[2]?.answer || "";
+  const presence = debriefState.answers[4]?.answer || "";
+
+  const insights = [
+    {
+      label: "Emotional State",
+      text: `You came out of the session feeling "${feeling.toLowerCase()}." This is worth paying attention to — your immediate post-session feeling often signals what your mind is still processing.`,
+    },
+  ];
+
+  if (stuckWith) {
+    insights.push({
+      label: "Key Takeaway",
+      text: `Something that stuck with you: "${stuckWith}" — Ash will keep track of this for future conversations.`,
+    });
+  }
+
+  if (unsaid && unsaid.toLowerCase().includes("yes")) {
+    insights.push({
+      label: "Unspoken",
+      text: "You mentioned there was something left unsaid. That's common and important. Consider bringing it up next session, or you can explore it with Ash anytime.",
+    });
+  }
+
+  insights.forEach(ins => {
+    const card = document.createElement("div");
+    card.className = "debrief-insight-card";
+    card.innerHTML = `
+      <div class="debrief-insight-card-label">${ins.label}</div>
+      <div class="debrief-insight-card-text">${ins.text}</div>
+    `;
+    contentEl.appendChild(card);
+  });
+
+  debriefState.insight = insights;
+
+  // Psychology breakdown
+  const psychTerms = detectPsychTerms(debriefState.answers);
+  if (psychTerms.length > 0) {
+    psychEl.style.display = "block";
+    psychTerms.forEach(term => {
+      const el = document.createElement("div");
+      el.className = "debrief-psych-term";
+      el.innerHTML = `
+        <div class="debrief-psych-term-name">${term.name}</div>
+        <div class="debrief-psych-term-def">${term.definition}</div>
+      `;
+      psychContentEl.appendChild(el);
+    });
+  } else {
+    psychEl.style.display = "none";
+  }
+}
+
+function detectPsychTerms(answers) {
+  const terms = [];
+  const allText = answers.map(a => a.answer).join(" ").toLowerCase();
+
+  if (allText.includes("numb") || allText.includes("checked out") || allText.includes("distracted")) {
+    terms.push({
+      name: "Dissociation",
+      definition: "A feeling of detachment from your thoughts, feelings, or surroundings. It's your mind's way of protecting you from overwhelm. Mild dissociation during therapy is common.",
+    });
+  }
+  if (allText.includes("heavy") || allText.includes("drained") || allText.includes("exhausted")) {
+    terms.push({
+      name: "Emotional Processing",
+      definition: "Feeling heavy after therapy often means you're doing deep work. Your brain is actively reorganizing how it stores and understands difficult experiences.",
+    });
+  }
+  if (allText.includes("lighter") || allText.includes("hopeful") || allText.includes("relief")) {
+    terms.push({
+      name: "Catharsis",
+      definition: "The release of emotional tension through expression. Feeling lighter is a sign that voicing your experience helped your nervous system settle.",
+    });
+  }
+  if (allText.includes("confused") || allText.includes("not sure")) {
+    terms.push({
+      name: "Cognitive Restructuring",
+      definition: "Confusion after therapy can signal that old thought patterns are being challenged. This is actually progress — your brain is making room for new perspectives.",
+    });
+  }
+
+  return terms;
+}
+
+// ─── Insight → Memory ───────────────────────────────────────────────────────
+
+$("btn-insight-continue")?.addEventListener("click", () => {
+  showView("debrief-memory");
+});
+
+// ─── Memory toggles ─────────────────────────────────────────────────────────
+
+$("btn-memory-save")?.addEventListener("click", () => {
+  debriefState.memory.session = $("mem-session").checked;
+  debriefState.memory.answers = $("mem-answers").checked;
+  debriefState.memory.insight = $("mem-insight").checked;
+
+  const anyOn = debriefState.memory.session || debriefState.memory.answers || debriefState.memory.insight;
+
+  const titleEl = $("debrief-complete-title");
+  const subEl = $("debrief-complete-sub");
+  const badgeEl = $("debrief-duration-badge");
+
+  const elapsed = debriefState.startedAt
+    ? Math.round((Date.now() - debriefState.startedAt) / 60000 * 10) / 10
+    : 0;
+
+  if (anyOn) {
+    titleEl.textContent = "I'll remember this";
+    subEl.textContent = "I'm gonna remember this for if/when you bring it up in our convo.";
+  } else {
+    titleEl.textContent = "All good";
+    subEl.textContent = "Nothing saved — but you still did the work.";
+  }
+
+  badgeEl.textContent = `you debriefed with Ash for ${elapsed < 1 ? "less than a minute" : elapsed.toFixed(1) + " mins"}`;
+
+  showView("debrief-complete");
+});
+
+$("btn-memory-none")?.addEventListener("click", () => {
+  $("mem-session").checked = false;
+  $("mem-answers").checked = false;
+  $("mem-insight").checked = false;
+
+  debriefState.memory = { session: false, answers: false, insight: false };
+
+  const elapsed = debriefState.startedAt
+    ? Math.round((Date.now() - debriefState.startedAt) / 60000 * 10) / 10
+    : 0;
+
+  $("debrief-complete-title").textContent = "All good";
+  $("debrief-complete-sub").textContent = "Nothing saved — but you still did the work.";
+  $("debrief-duration-badge").textContent = `you debriefed with Ash for ${elapsed < 1 ? "less than a minute" : elapsed.toFixed(1) + " mins"}`;
+
+  showView("debrief-complete");
+});
+
+// ─── Complete → back to chat ────────────────────────────────────────────────
+
+$("btn-debrief-to-chat")?.addEventListener("click", () => {
+  // Reset debrief state
+  debriefState.startedAt = null;
+  debriefState.mode = null;
+  debriefState.ventText = null;
+  debriefState.answers = [];
+  debriefState.insight = null;
+  debriefState.questionIndex = 0;
+  debriefState.uploadedFiles = [];
+
+  // Clear questionnaire conversation
+  const convo = $("debrief-q-conversation");
+  if (convo) convo.innerHTML = "";
+
+  showView("idle");
 });
