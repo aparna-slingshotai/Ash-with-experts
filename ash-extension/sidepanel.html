@@ -18,6 +18,7 @@
         <div class="ash-mark">✦</div>
         <p class="idle-label">Waiting for a session</p>
         <p class="idle-sub">Ash will activate automatically when a therapy call starts in your browser.</p>
+        <button id="btn-debrief-manual" class="btn-debrief-manual">Debrief ✦</button>
       </div>
     </div>
 
@@ -208,6 +209,218 @@
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Prompt (post-session nudge or manual entry) ────── -->
+    <div id="view-debrief-prompt" class="view">
+      <div class="debrief-prompt-body">
+        <div class="ash-mark large">✦</div>
+        <h2 class="debrief-prompt-title">Want to talk about it?</h2>
+        <p class="debrief-prompt-sub">Ash noticed you just finished a session. Take a moment to debrief — it helps you process.</p>
+        <button id="btn-debrief-yes" class="btn-primary">Let's debrief</button>
+        <button id="btn-debrief-dismiss" class="btn-ghost">Not right now</button>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Choose mode ──────────────────────────────────────── -->
+    <div id="view-debrief-choice" class="view">
+      <div class="debrief-choice-body">
+        <div class="ash-mark small">✦</div>
+        <h2 class="debrief-choice-title">How do you want to start?</h2>
+        <p class="debrief-choice-sub">You can jump right in or answer a few quick questions first.</p>
+        <div class="debrief-choice-options">
+          <button id="btn-choice-vent" class="debrief-choice-card">
+            <span class="choice-icon">🎙</span>
+            <span class="choice-label">Just let me vent</span>
+            <span class="choice-desc">Start talking — like a voice memo</span>
+          </button>
+          <button id="btn-choice-questionnaire" class="debrief-choice-card">
+            <span class="choice-icon">📋</span>
+            <span class="choice-label">Quick check-in first</span>
+            <span class="choice-desc">A few questions to guide the debrief</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Pre-vent questionnaire ───────────────────────────── -->
+    <div id="view-debrief-questionnaire" class="view">
+      <div class="debrief-q-scroll">
+        <div class="debrief-q-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-q-title">Quick check-in</h2>
+        </div>
+        <div id="debrief-q-container" class="debrief-q-container"></div>
+        <div class="debrief-q-actions">
+          <button id="btn-q-done" class="btn-primary">Done — let me vent</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Venting (voice memo recording) ───────────────────── -->
+    <div id="view-debrief-vent" class="view">
+      <div class="debrief-vent-body">
+        <div class="vent-status">
+          <span class="rec-dot"></span>
+          <span class="vent-label">Recording</span>
+          <span id="vent-timer" class="rec-timer">00:00</span>
+        </div>
+        <div class="vent-visual">
+          <div class="vent-circle">
+            <div class="vent-pulse"></div>
+            <div class="vent-mic">🎙</div>
+          </div>
+        </div>
+        <p class="vent-hint">Say whatever's on your mind</p>
+      </div>
+      <div class="vent-footer">
+        <button id="btn-vent-done" class="btn-primary">I'm done</button>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Vent complete + optional context ─────────────────── -->
+    <div id="view-debrief-context" class="view">
+      <div class="debrief-ctx-scroll">
+        <div class="debrief-ctx-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-ctx-title">Got it</h2>
+          <p class="debrief-ctx-sub">Anything else you want to share?</p>
+        </div>
+
+        <!-- Voice note preview -->
+        <div class="voice-note-container" id="vent-note-container">
+          <div class="voice-note" id="vent-voice-note">
+            <button class="voice-note-play" id="btn-vent-play">▶</button>
+            <div class="voice-note-wave" id="vent-wave-bars"></div>
+            <span class="voice-note-duration" id="vent-duration">0:00</span>
+          </div>
+          <div class="voice-note-transcript" id="vent-transcript-preview">
+            <p class="voice-note-transcript-text" id="vent-transcript-text"></p>
+            <button class="voice-note-transcript-toggle" id="vent-transcript-toggle">Read more</button>
+          </div>
+        </div>
+
+        <!-- Upload section -->
+        <div class="upload-section">
+          <h3 class="upload-title">Add context</h3>
+          <p class="upload-sub">Upload pictures, transcripts, or documents that might help.</p>
+          <div class="upload-area" id="debrief-upload-area">
+            <div class="upload-area-inner">
+              <span class="upload-plus">+</span>
+              <span class="upload-text">Drop files or click to upload</span>
+            </div>
+          </div>
+          <input type="file" id="debrief-file-input" multiple style="display:none" />
+          <div class="uploaded-files" id="debrief-uploaded-files"></div>
+        </div>
+
+        <div class="debrief-ctx-actions">
+          <button id="btn-debrief-continue" class="btn-primary">Continue ✦</button>
+          <button id="btn-debrief-skip-ctx" class="btn-ghost">Skip</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Processing (Ash preparing Q&A) ───────────────────── -->
+    <div id="view-debrief-processing" class="view">
+      <div class="processing-center">
+        <div class="ash-mark thinking">✦</div>
+        <div class="thinking-text">
+          <span id="debrief-thinking-phrase" class="thinking-phrase">reflecting on what you shared</span>
+          <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+        <div class="thinking-progress">
+          <div class="thinking-bar" id="debrief-thinking-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Interactive Q&A with Ash ─────────────────────────── -->
+    <div id="view-debrief-qa" class="view">
+      <div class="debrief-qa-scroll">
+        <div class="debrief-qa-header">
+          <div class="ash-mark small">✦</div>
+          <p class="debrief-qa-intro">Let me ask you a few things before we can talk about it.</p>
+        </div>
+        <div id="debrief-qa-thread" class="debrief-qa-thread"></div>
+      </div>
+      <div class="debrief-qa-input-area">
+        <div class="input-wrap">
+          <input type="text" id="debrief-qa-input" class="user-input" placeholder="Type your answer..." />
+          <button id="btn-debrief-qa-send" class="btn-ask">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Insight ──────────────────────────────────────────── -->
+    <div id="view-debrief-insight" class="view">
+      <div class="debrief-insight-scroll">
+        <div class="debrief-insight-header">
+          <div class="ash-mark small">✦</div>
+          <h2 class="debrief-insight-title">Here's what I noticed</h2>
+        </div>
+        <div class="debrief-insight-card" id="debrief-insight-content"></div>
+
+        <!-- Memory consent -->
+        <div class="debrief-memory-section">
+          <h3 class="debrief-memory-title">What should I remember?</h3>
+          <div class="debrief-memory-toggles">
+            <label class="memory-toggle">
+              <span class="memory-toggle-label">This debrief session</span>
+              <input type="checkbox" id="mem-debrief" checked />
+              <span class="memory-toggle-slider"></span>
+            </label>
+            <label class="memory-toggle">
+              <span class="memory-toggle-label">Your answers to my questions</span>
+              <input type="checkbox" id="mem-answers" checked />
+              <span class="memory-toggle-slider"></span>
+            </label>
+            <label class="memory-toggle">
+              <span class="memory-toggle-label">The insight I generated</span>
+              <input type="checkbox" id="mem-insight" checked />
+              <span class="memory-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="debrief-insight-actions">
+          <button id="btn-debrief-finish" class="btn-primary">Done ✦</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Complete (back to chat) ──────────────────────────── -->
+    <div id="view-debrief-complete" class="view">
+      <div class="debrief-complete-scroll">
+        <!-- Voice note bubble -->
+        <div class="debrief-chat-area" id="debrief-chat-area">
+          <div class="voice-note-container sent" id="complete-note-container">
+            <div class="voice-note sent" id="complete-voice-note">
+              <button class="voice-note-play" id="btn-complete-play">▶</button>
+              <div class="voice-note-wave" id="complete-wave-bars"></div>
+              <span class="voice-note-duration" id="complete-duration">0:00</span>
+            </div>
+            <div class="voice-note-transcript" id="complete-transcript-preview">
+              <p class="voice-note-transcript-text" id="complete-transcript-text"></p>
+              <button class="voice-note-transcript-toggle" id="complete-transcript-toggle">Read more</button>
+            </div>
+          </div>
+          <div class="debrief-ash-message" id="debrief-ash-response"></div>
+        </div>
+        <div class="debrief-complete-footer">
+          <span class="debrief-hairline" id="debrief-hairline">you debriefed with Ash for 0 mins</span>
+        </div>
+      </div>
+      <div class="debrief-complete-input-area">
+        <div class="input-wrap">
+          <input type="text" id="debrief-chat-input" class="user-input" placeholder="Continue chatting with Ash..." />
+          <button id="btn-debrief-chat-send" class="btn-ask">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
       </div>
     </div>

@@ -14,12 +14,21 @@ let thinkingInterval = null;
 // ─── DOM refs ────────────────────────────────────────────────────────────────
 
 const views = {
-  idle:       document.getElementById("view-idle"),
-  detected:   document.getElementById("view-detected"),
-  recording:  document.getElementById("view-recording"),
-  processing: document.getElementById("view-processing"),
-  context:    document.getElementById("view-context"),
-  summary:    document.getElementById("view-summary"),
+  idle:                 document.getElementById("view-idle"),
+  detected:             document.getElementById("view-detected"),
+  recording:            document.getElementById("view-recording"),
+  processing:           document.getElementById("view-processing"),
+  context:              document.getElementById("view-context"),
+  summary:              document.getElementById("view-summary"),
+  "debrief-prompt":     document.getElementById("view-debrief-prompt"),
+  "debrief-choice":     document.getElementById("view-debrief-choice"),
+  "debrief-questionnaire": document.getElementById("view-debrief-questionnaire"),
+  "debrief-vent":       document.getElementById("view-debrief-vent"),
+  "debrief-context":    document.getElementById("view-debrief-context"),
+  "debrief-processing": document.getElementById("view-debrief-processing"),
+  "debrief-qa":         document.getElementById("view-debrief-qa"),
+  "debrief-insight":    document.getElementById("view-debrief-insight"),
+  "debrief-complete":   document.getElementById("view-debrief-complete"),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -714,5 +723,620 @@ chrome.runtime.onMessage.addListener((message) => {
       showView("context");
       populateContextView(message.transcript);
       break;
+    case "DEBRIEF_PROMPT":
+      showView("debrief-prompt");
+      break;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── DEBRIEF FLOW ──────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let ventRecorder = null;
+let ventAudioChunks = [];
+let ventAudioBlob = null;
+let ventAudioUrl = null;
+let ventTimerInterval = null;
+let ventElapsedSeconds = 0;
+let debriefStartTime = null;
+let debriefQuestionnaireAnswers = {};
+let debriefQAHistory = [];
+let debriefInsight = null;
+let debriefUploadedFiles = [];
+let ventTranscriptText = "";
+
+// ─── Debrief DOM refs ───────────────────────────────────────────────────────
+
+const btnDebriefManual  = $("btn-debrief-manual");
+const btnDebriefYes     = $("btn-debrief-yes");
+const btnDebriefDismiss = $("btn-debrief-dismiss");
+const btnChoiceVent     = $("btn-choice-vent");
+const btnChoiceQ        = $("btn-choice-questionnaire");
+const btnQDone          = $("btn-q-done");
+const btnVentDone       = $("btn-vent-done");
+const btnDebriefContinue = $("btn-debrief-continue");
+const btnDebriefSkipCtx  = $("btn-debrief-skip-ctx");
+const btnDebriefFinish   = $("btn-debrief-finish");
+const ventTimerEl        = $("vent-timer");
+
+// ─── Pre-vent questionnaire data ────────────────────────────────────────────
+
+const DEBRIEF_QUESTIONS = [
+  {
+    id: "mood",
+    label: "How are you feeling right now?",
+    options: ["Lighter", "Heavy", "Mixed", "Numb", "Energized", "Unsure"],
+  },
+  {
+    id: "session-feel",
+    label: "How did the session feel?",
+    options: ["Productive", "Difficult", "Eye-opening", "Frustrating", "Comforting", "Confusing"],
+  },
+  {
+    id: "lingering",
+    label: "Is anything still lingering?",
+    options: ["Something they said", "A feeling I can't name", "A memory that came up", "Nothing specific", "Everything"],
+  },
+];
+
+// ─── Entry points ───────────────────────────────────────────────────────────
+
+btnDebriefManual.addEventListener("click", () => {
+  debriefStartTime = Date.now();
+  showView("debrief-choice");
+});
+
+btnDebriefYes.addEventListener("click", () => {
+  debriefStartTime = Date.now();
+  showView("debrief-choice");
+});
+
+btnDebriefDismiss.addEventListener("click", () => {
+  showView("idle");
+  chrome.storage.session.set({ sessionState: "idle" });
+});
+
+// ─── Choice: vent or questionnaire first ────────────────────────────────────
+
+btnChoiceVent.addEventListener("click", () => {
+  startVentRecording();
+});
+
+btnChoiceQ.addEventListener("click", () => {
+  renderQuestionnaire();
+  showView("debrief-questionnaire");
+});
+
+// ─── Pre-vent questionnaire ─────────────────────────────────────────────────
+
+function renderQuestionnaire() {
+  const container = $("debrief-q-container");
+  container.innerHTML = "";
+  debriefQuestionnaireAnswers = {};
+
+  DEBRIEF_QUESTIONS.forEach(q => {
+    const item = document.createElement("div");
+    item.className = "debrief-q-item";
+
+    const label = document.createElement("div");
+    label.className = "debrief-q-label";
+    label.textContent = q.label;
+    item.appendChild(label);
+
+    const options = document.createElement("div");
+    options.className = "debrief-q-options";
+
+    q.options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.className = "debrief-q-option";
+      btn.textContent = opt;
+      btn.addEventListener("click", () => {
+        options.querySelectorAll(".debrief-q-option").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        debriefQuestionnaireAnswers[q.id] = opt;
+      });
+      options.appendChild(btn);
+    });
+
+    item.appendChild(options);
+    container.appendChild(item);
+  });
+}
+
+btnQDone.addEventListener("click", () => {
+  startVentRecording();
+});
+
+// ─── Vent recording (voice memo) ────────────────────────────────────────────
+
+async function startVentRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    ventAudioChunks = [];
+    ventRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+    ventRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) ventAudioChunks.push(e.data);
+    };
+
+    ventRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      ventAudioBlob = new Blob(ventAudioChunks, { type: "audio/webm" });
+      ventAudioUrl = URL.createObjectURL(ventAudioBlob);
+      onVentComplete();
+    };
+
+    ventRecorder.start(1000);
+    ventElapsedSeconds = 0;
+    showView("debrief-vent");
+    startVentTimer();
+  } catch (err) {
+    console.error("[Ash] Vent recording failed:", err);
+  }
+}
+
+function startVentTimer() {
+  updateVentTimerDisplay();
+  ventTimerInterval = setInterval(() => {
+    ventElapsedSeconds++;
+    updateVentTimerDisplay();
+  }, 1000);
+}
+
+function stopVentTimer() {
+  clearInterval(ventTimerInterval);
+}
+
+function updateVentTimerDisplay() {
+  const m = String(Math.floor(ventElapsedSeconds / 60)).padStart(2, "0");
+  const s = String(ventElapsedSeconds % 60).padStart(2, "0");
+  ventTimerEl.textContent = `${m}:${s}`;
+}
+
+btnVentDone.addEventListener("click", () => {
+  stopVentTimer();
+  if (ventRecorder && ventRecorder.state !== "inactive") {
+    ventRecorder.stop();
+  }
+});
+
+// ─── Vent complete → context view ───────────────────────────────────────────
+
+function onVentComplete() {
+  renderVoiceNote(
+    $("vent-voice-note"), $("vent-wave-bars"), $("vent-duration"), $("btn-vent-play"),
+    $("vent-transcript-text"), $("vent-transcript-toggle")
+  );
+  showView("debrief-context");
+
+  // Wire up debrief upload area
+  const debriefUploadArea = $("debrief-upload-area");
+  const debriefFileInput = $("debrief-file-input");
+  const debriefUploadedFilesEl = $("debrief-uploaded-files");
+
+  debriefUploadArea.addEventListener("click", () => debriefFileInput.click());
+  debriefUploadArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    debriefUploadArea.classList.add("drag-over");
+  });
+  debriefUploadArea.addEventListener("dragleave", () => {
+    debriefUploadArea.classList.remove("drag-over");
+  });
+  debriefUploadArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    debriefUploadArea.classList.remove("drag-over");
+    handleDebriefFiles(e.dataTransfer.files, debriefUploadedFilesEl);
+  });
+  debriefFileInput.addEventListener("change", (e) => {
+    handleDebriefFiles(e.target.files, debriefUploadedFilesEl);
+    debriefFileInput.value = "";
+  });
+}
+
+function handleDebriefFiles(fileList, container) {
+  for (const file of fileList) {
+    debriefUploadedFiles.push(file);
+    renderFilePill(file, debriefUploadedFiles.length - 1);
+    // Append to the debrief container instead
+    const pill = container.parentElement.querySelector(`.file-pill[data-index="${debriefUploadedFiles.length - 1}"]`);
+    if (pill) container.appendChild(pill);
+  }
+}
+
+// ─── Voice note renderer ────────────────────────────────────────────────────
+
+function renderVoiceNote(noteEl, waveEl, durationEl, playBtn, transcriptTextEl, transcriptToggleEl) {
+  // Generate random wave bars
+  waveEl.innerHTML = "";
+  const barCount = 30;
+  for (let i = 0; i < barCount; i++) {
+    const bar = document.createElement("div");
+    bar.className = "wave-bar";
+    bar.style.height = (4 + Math.random() * 18) + "px";
+    waveEl.appendChild(bar);
+  }
+
+  // Duration
+  const mins = Math.floor(ventElapsedSeconds / 60);
+  const secs = ventElapsedSeconds % 60;
+  durationEl.textContent = `${mins}:${String(secs).padStart(2, "0")}`;
+
+  // Play/pause
+  let audio = null;
+  let isPlaying = false;
+
+  playBtn.addEventListener("click", () => {
+    if (!ventAudioUrl) return;
+
+    if (!audio) {
+      audio = new Audio(ventAudioUrl);
+      audio.addEventListener("ended", () => {
+        isPlaying = false;
+        playBtn.textContent = "▶";
+        playBtn.classList.remove("playing");
+        // Reset wave bars
+        waveEl.querySelectorAll(".wave-bar").forEach(b => b.classList.remove("played"));
+      });
+
+      audio.addEventListener("timeupdate", () => {
+        const pct = audio.currentTime / audio.duration;
+        const bars = waveEl.querySelectorAll(".wave-bar");
+        bars.forEach((b, i) => {
+          b.classList.toggle("played", i / bars.length < pct);
+        });
+      });
+    }
+
+    if (isPlaying) {
+      audio.pause();
+      isPlaying = false;
+      playBtn.textContent = "▶";
+      playBtn.classList.remove("playing");
+    } else {
+      audio.play();
+      isPlaying = true;
+      playBtn.textContent = "❚❚";
+      playBtn.classList.add("playing");
+    }
+  });
+
+  // Transcript expand/collapse
+  if (transcriptTextEl && transcriptToggleEl && ventTranscriptText) {
+    transcriptTextEl.textContent = ventTranscriptText;
+    transcriptToggleEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isExpanded = transcriptTextEl.classList.toggle("expanded");
+      transcriptToggleEl.textContent = isExpanded ? "Show less" : "Read more";
+    });
+  } else if (transcriptTextEl && !ventTranscriptText) {
+    // Hide transcript area if no transcript yet
+    transcriptTextEl.parentElement.style.display = "none";
+  }
+}
+
+// ─── Continue to Ash Q&A ────────────────────────────────────────────────────
+
+btnDebriefContinue.addEventListener("click", () => startDebriefQA());
+btnDebriefSkipCtx.addEventListener("click", () => startDebriefQA());
+
+async function startDebriefQA() {
+  showView("debrief-processing");
+
+  // Animate processing
+  const bar = $("debrief-thinking-bar");
+  const phrase = $("debrief-thinking-phrase");
+  bar.style.width = "0%";
+
+  const phrases = [
+    "reflecting on what you shared",
+    "finding the right questions",
+    "connecting the pieces",
+    "preparing your debrief",
+  ];
+  let phraseIdx = 0;
+  let progress = 0;
+
+  const processingInterval = setInterval(() => {
+    phraseIdx = (phraseIdx + 1) % phrases.length;
+    phrase.classList.add("fade-out");
+    setTimeout(() => {
+      phrase.textContent = phrases[phraseIdx];
+      phrase.classList.remove("fade-out");
+    }, 300);
+    progress = Math.min(progress + 20 + Math.random() * 10, 90);
+    bar.style.width = progress + "%";
+  }, 2000);
+
+  try {
+    // Transcribe the vent audio first
+    let ventTranscript = "";
+    if (ventAudioBlob) {
+      ventTranscript = await transcribeVentAudio(ventAudioBlob);
+    }
+
+    // Store transcript text for voice note display
+    ventTranscriptText = ventTranscript;
+
+    // Update transcript preview if already rendered
+    const ventTextEl = $("vent-transcript-text");
+    if (ventTextEl && ventTranscript) {
+      ventTextEl.textContent = ventTranscript;
+      ventTextEl.parentElement.style.display = "";
+    }
+
+    // Call backend to generate debrief questions
+    const res = await fetch(`${ASH_APP_URL}/api/debrief/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ventTranscript,
+        questionnaireAnswers: debriefQuestionnaireAnswers,
+      }),
+    });
+    const data = await res.json();
+
+    clearInterval(processingInterval);
+    bar.style.width = "100%";
+
+    setTimeout(() => {
+      showView("debrief-qa");
+      startQAConversation(data.questions || [], data.debriefId);
+    }, 500);
+  } catch (err) {
+    console.error("[Ash] Debrief QA start failed:", err);
+    clearInterval(processingInterval);
+    bar.style.width = "100%";
+
+    // Fallback: use default questions
+    setTimeout(() => {
+      showView("debrief-qa");
+      startQAConversation([
+        "What felt most important about what you just shared?",
+        "Was there a moment in the session that surprised you?",
+        "How does what came up connect to your day-to-day life?",
+      ], null);
+    }, 500);
+  }
+}
+
+async function transcribeVentAudio(blob) {
+  try {
+    const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
+      method: "POST",
+      headers: { authorization: ASSEMBLYAI_API_KEY },
+      body: blob,
+    });
+    const { upload_url } = await uploadRes.json();
+
+    const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: {
+        authorization: ASSEMBLYAI_API_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ audio_url: upload_url }),
+    });
+    const { id: jobId } = await transcriptRes.json();
+
+    // Poll
+    while (true) {
+      const res = await fetch(`https://api.assemblyai.com/v2/transcript/${jobId}`, {
+        headers: { authorization: ASSEMBLYAI_API_KEY },
+      });
+      const data = await res.json();
+      if (data.status === "completed") return data.text || "";
+      if (data.status === "error") throw new Error(data.error);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  } catch (err) {
+    console.error("[Ash] Vent transcription failed:", err);
+    return "";
+  }
+}
+
+// ─── Q&A Conversation ───────────────────────────────────────────────────────
+
+let qaQuestions = [];
+let qaQuestionIndex = 0;
+let qaDebriefId = null;
+
+function startQAConversation(questions, debriefId) {
+  qaQuestions = questions;
+  qaQuestionIndex = 0;
+  qaDebriefId = debriefId;
+  debriefQAHistory = [];
+
+  const thread = $("debrief-qa-thread");
+  thread.innerHTML = "";
+
+  // Ask first question
+  if (qaQuestions.length > 0) {
+    appendQABubble("ash", qaQuestions[0]);
+    debriefQAHistory.push({ role: "ash", content: qaQuestions[0] });
+  }
+}
+
+function appendQABubble(role, text) {
+  const thread = $("debrief-qa-thread");
+  const bubble = document.createElement("div");
+  bubble.className = `qa-bubble ${role}`;
+  bubble.textContent = text;
+  thread.appendChild(bubble);
+  thread.scrollTop = thread.scrollHeight;
+
+  // Check for psychology terms and add breakdown
+  if (role === "ash") {
+    const terms = detectPsychTerms(text);
+    terms.forEach(term => {
+      const termEl = document.createElement("span");
+      termEl.className = "psych-term";
+      termEl.textContent = term.name;
+      termEl.title = term.definition;
+      bubble.appendChild(termEl);
+    });
+  }
+}
+
+function showTypingIndicator() {
+  const thread = $("debrief-qa-thread");
+  const typing = document.createElement("div");
+  typing.className = "qa-typing";
+  typing.id = "qa-typing-indicator";
+  typing.innerHTML = "<span></span><span></span><span></span>";
+  thread.appendChild(typing);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  const el = $("qa-typing-indicator");
+  if (el) el.remove();
+}
+
+const PSYCH_TERMS_MAP = {
+  "cognitive distortion": "A pattern of thinking that's biased or inaccurate, often reinforcing negative thoughts.",
+  "catastrophizing": "Assuming the worst possible outcome will happen, even when it's unlikely.",
+  "rumination": "Repetitively going over the same thoughts, usually negative, without reaching a resolution.",
+  "emotional regulation": "The ability to manage and respond to emotional experiences in a healthy way.",
+  "attachment style": "Patterns in how you relate to others in close relationships, often shaped early in life.",
+  "boundaries": "Limits you set to protect your emotional and mental well-being in relationships.",
+  "projection": "Attributing your own feelings or thoughts to someone else.",
+  "dissociation": "Feeling disconnected from your thoughts, feelings, or surroundings as a coping mechanism.",
+  "hypervigilance": "Being in a constant state of alertness, often linked to anxiety or past trauma.",
+  "inner critic": "The internal voice that judges and criticizes you, often more harshly than warranted.",
+};
+
+function detectPsychTerms(text) {
+  const found = [];
+  const lower = text.toLowerCase();
+  for (const [term, definition] of Object.entries(PSYCH_TERMS_MAP)) {
+    if (lower.includes(term)) {
+      found.push({ name: term, definition });
+    }
+  }
+  return found;
+}
+
+// Q&A input handling
+$("btn-debrief-qa-send").addEventListener("click", handleQAInput);
+$("debrief-qa-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") handleQAInput();
+});
+
+async function handleQAInput() {
+  const input = $("debrief-qa-input");
+  const answer = input.value.trim();
+  if (!answer) return;
+  input.value = "";
+
+  appendQABubble("user", answer);
+  debriefQAHistory.push({ role: "user", content: answer });
+  qaQuestionIndex++;
+
+  if (qaQuestionIndex < qaQuestions.length) {
+    // Ask next question
+    showTypingIndicator();
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
+    removeTypingIndicator();
+    appendQABubble("ash", qaQuestions[qaQuestionIndex]);
+    debriefQAHistory.push({ role: "ash", content: qaQuestions[qaQuestionIndex] });
+  } else {
+    // All questions answered — generate insight
+    showTypingIndicator();
+    await generateDebriefInsight();
+  }
+}
+
+// ─── Insight generation ─────────────────────────────────────────────────────
+
+async function generateDebriefInsight() {
+  try {
+    const res = await fetch(`${ASH_APP_URL}/api/debrief/insight`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        debriefId: qaDebriefId,
+        qaHistory: debriefQAHistory,
+        questionnaireAnswers: debriefQuestionnaireAnswers,
+      }),
+    });
+    const data = await res.json();
+    removeTypingIndicator();
+    debriefInsight = data.insight;
+    showInsightView(data.insight);
+  } catch (err) {
+    console.error("[Ash] Insight generation failed:", err);
+    removeTypingIndicator();
+    // Fallback insight
+    const fallback = {
+      summary: "Based on what you shared, it sounds like this session brought up some important threads worth sitting with.",
+      highlight: "The way you described your experience suggests you're becoming more aware of your patterns — that's meaningful progress.",
+    };
+    debriefInsight = fallback;
+    showInsightView(fallback);
+  }
+}
+
+function showInsightView(insight) {
+  const content = $("debrief-insight-content");
+  content.innerHTML = `
+    <p>${insight.summary || insight}</p>
+    ${insight.highlight ? `<div class="insight-highlight">${insight.highlight}</div>` : ""}
+  `;
+  showView("debrief-insight");
+}
+
+// ─── Memory consent + finish ────────────────────────────────────────────────
+
+btnDebriefFinish.addEventListener("click", async () => {
+  const rememberDebrief  = $("mem-debrief").checked;
+  const rememberAnswers  = $("mem-answers").checked;
+  const rememberInsight  = $("mem-insight").checked;
+
+  const debriefDuration = debriefStartTime
+    ? Math.round((Date.now() - debriefStartTime) / 60000 * 10) / 10
+    : 0;
+
+  // Save to backend
+  try {
+    await fetch(`${ASH_APP_URL}/api/debrief/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        debriefId: qaDebriefId,
+        remember: { debrief: rememberDebrief, answers: rememberAnswers, insight: rememberInsight },
+        qaHistory: rememberAnswers ? debriefQAHistory : [],
+        insight: rememberInsight ? debriefInsight : null,
+        questionnaireAnswers: debriefQuestionnaireAnswers,
+        durationMinutes: debriefDuration,
+      }),
+    });
+  } catch (err) {
+    console.error("[Ash] Failed to save debrief:", err);
+  }
+
+  // Show complete view
+  showView("debrief-complete");
+
+  // Render voice note in complete view
+  renderVoiceNote(
+    $("complete-voice-note"),
+    $("complete-wave-bars"),
+    $("complete-duration"),
+    $("btn-complete-play"),
+    $("complete-transcript-text"),
+    $("complete-transcript-toggle")
+  );
+
+  // Set hairline text
+  $("debrief-hairline").textContent = `you debriefed with Ash for ${debriefDuration} mins`;
+
+  // Show Ash's closing message
+  const ashMsg = $("debrief-ash-response");
+  if (rememberDebrief || rememberAnswers || rememberInsight) {
+    ashMsg.textContent = "I'm gonna remember this for if/when you bring it up in our convo.";
+  } else {
+    ashMsg.textContent = "No worries — this stays between us for now. I'm here whenever you want to talk.";
   }
 });

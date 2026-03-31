@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#ebe7de" />
+  <title>Ash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Home ──────────────────────────────────────────────────────── -->
+    <div id="view-home" class="view active">
+      <div class="home-body">
+        <div class="ash-mark large">&#10022;</div>
+        <h1 class="home-title">Ash</h1>
+        <p class="home-sub">Your companion between sessions</p>
+        <button id="btn-debrief" class="btn-primary">Debrief &#10022;</button>
+        <p class="home-hint">Had a session recently? Let's talk about it.</p>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Prompt (post-session nudge) ─────────────────────── -->
+    <div id="view-debrief-prompt" class="view">
+      <div class="screen-center">
+        <div class="ash-mark large">&#10022;</div>
+        <h2 class="screen-title">Want to talk about it?</h2>
+        <p class="screen-sub">Take a moment to debrief &mdash; it helps you process.</p>
+        <button id="btn-debrief-yes" class="btn-primary">Let's debrief</button>
+        <button id="btn-debrief-dismiss" class="btn-ghost">Not right now</button>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Choose mode ──────────────────────────────────────── -->
+    <div id="view-debrief-choice" class="view">
+      <div class="screen-top">
+        <button class="btn-back" id="btn-back-choice">&larr;</button>
+        <div class="ash-mark small">&#10022;</div>
+        <h2 class="screen-title">How do you want to start?</h2>
+        <p class="screen-sub">Jump right in or answer a few quick questions first.</p>
+        <div class="choice-cards">
+          <button id="btn-choice-vent" class="choice-card">
+            <span class="choice-emoji">&#127908;</span>
+            <span class="choice-label">Just let me vent</span>
+            <span class="choice-desc">Start talking &mdash; like a voice memo</span>
+          </button>
+          <button id="btn-choice-questionnaire" class="choice-card">
+            <span class="choice-emoji">&#128203;</span>
+            <span class="choice-label">Quick check-in first</span>
+            <span class="choice-desc">A few questions to guide the debrief</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Pre-vent questionnaire ───────────────────────────── -->
+    <div id="view-debrief-questionnaire" class="view">
+      <div class="scroll-view">
+        <button class="btn-back" id="btn-back-q">&larr;</button>
+        <div class="section-header">
+          <div class="ash-mark small">&#10022;</div>
+          <h2 class="screen-title">Quick check-in</h2>
+        </div>
+        <div id="q-container" class="q-container"></div>
+        <div class="bottom-actions">
+          <button id="btn-q-done" class="btn-primary">Done &mdash; let me vent</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Venting (voice memo) ─────────────────────────────── -->
+    <div id="view-vent" class="view">
+      <div class="screen-center">
+        <div class="vent-status">
+          <span class="rec-dot"></span>
+          <span class="vent-label">Recording</span>
+          <span id="vent-timer" class="rec-timer">00:00</span>
+        </div>
+        <div class="vent-circle-wrap">
+          <div class="vent-pulse"></div>
+          <div class="vent-circle">
+            <span class="vent-mic">&#127908;</span>
+          </div>
+        </div>
+        <p class="screen-sub">Say whatever's on your mind</p>
+        <button id="btn-vent-done" class="btn-primary">I'm done</button>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Post-vent context ────────────────────────────────── -->
+    <div id="view-vent-context" class="view">
+      <div class="scroll-view">
+        <div class="section-header">
+          <div class="ash-mark small">&#10022;</div>
+          <h2 class="screen-title">Got it</h2>
+          <p class="screen-sub">Anything else you want to share?</p>
+        </div>
+
+        <!-- Voice note -->
+        <div class="voice-note-container" id="ctx-note-container">
+          <div class="voice-note">
+            <button class="vn-play" id="ctx-play">&#9654;</button>
+            <div class="vn-wave" id="ctx-wave"></div>
+            <span class="vn-dur" id="ctx-dur">0:00</span>
+          </div>
+          <div class="vn-transcript" id="ctx-transcript">
+            <p class="vn-transcript-text" id="ctx-transcript-text"></p>
+            <button class="vn-transcript-toggle" id="ctx-transcript-toggle">Read more</button>
+          </div>
+        </div>
+
+        <!-- Upload -->
+        <div class="upload-section">
+          <h3 class="upload-title">Add context</h3>
+          <p class="upload-sub">Upload pictures, transcripts, or documents that might help.</p>
+          <div class="upload-area" id="upload-area">
+            <div class="upload-inner">
+              <span class="upload-plus">+</span>
+              <span class="upload-text">Tap to upload</span>
+            </div>
+          </div>
+          <input type="file" id="file-input" multiple accept="image/*,.pdf,.doc,.docx,.txt" style="display:none" />
+          <div class="file-list" id="file-list"></div>
+        </div>
+
+        <div class="bottom-actions">
+          <button id="btn-ctx-continue" class="btn-primary">Continue &#10022;</button>
+          <button id="btn-ctx-skip" class="btn-ghost">Skip</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Processing ───────────────────────────────────────── -->
+    <div id="view-processing" class="view">
+      <div class="screen-center">
+        <div class="ash-mark thinking">&#10022;</div>
+        <div class="thinking-text">
+          <span id="thinking-phrase" class="thinking-phrase">reflecting on what you shared</span>
+          <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Interactive Q&A ──────────────────────────────────── -->
+    <div id="view-qa" class="view">
+      <div class="qa-scroll" id="qa-scroll">
+        <div class="qa-header">
+          <div class="ash-mark small">&#10022;</div>
+          <p class="qa-intro">Let me ask you a few things before we can talk about it.</p>
+        </div>
+        <div id="qa-thread" class="qa-thread"></div>
+      </div>
+      <div class="input-bar">
+        <div class="input-row">
+          <textarea id="qa-input" class="text-input" rows="1" placeholder="Type your answer..."></textarea>
+          <button id="btn-qa-send" class="btn-send">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Insight + memory consent ─────────────────────────── -->
+    <div id="view-insight" class="view">
+      <div class="scroll-view">
+        <div class="section-header">
+          <div class="ash-mark small">&#10022;</div>
+          <h2 class="screen-title">Here's what I noticed</h2>
+        </div>
+
+        <div class="insight-card" id="insight-content"></div>
+
+        <div class="memory-section">
+          <h3 class="memory-title">What should I remember?</h3>
+          <label class="toggle-row">
+            <span>This debrief session</span>
+            <input type="checkbox" id="mem-debrief" checked /><span class="toggle-track"></span>
+          </label>
+          <label class="toggle-row">
+            <span>Your answers to my questions</span>
+            <input type="checkbox" id="mem-answers" checked /><span class="toggle-track"></span>
+          </label>
+          <label class="toggle-row">
+            <span>The insight I generated</span>
+            <input type="checkbox" id="mem-insight" checked /><span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div class="bottom-actions">
+          <button id="btn-finish" class="btn-primary">Done &#10022;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Debrief: Complete (chat view) ─────────────────────────────── -->
+    <div id="view-complete" class="view">
+      <div class="chat-scroll" id="chat-scroll">
+        <!-- Voice note as sent message -->
+        <div class="voice-note-container sent" id="done-note-container">
+          <div class="voice-note sent">
+            <button class="vn-play" id="done-play">&#9654;</button>
+            <div class="vn-wave" id="done-wave"></div>
+            <span class="vn-dur" id="done-dur">0:00</span>
+          </div>
+          <div class="vn-transcript" id="done-transcript">
+            <p class="vn-transcript-text" id="done-transcript-text"></p>
+            <button class="vn-transcript-toggle" id="done-transcript-toggle">Read more</button>
+          </div>
+        </div>
+        <div class="chat-bubble ash" id="ash-closing-msg"></div>
+        <div class="hairline" id="hairline"></div>
+      </div>
+      <div class="input-bar">
+        <div class="input-row">
+          <textarea id="chat-input" class="text-input" rows="1" placeholder="Continue chatting with Ash..."></textarea>
+          <button id="btn-chat-send" class="btn-send">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

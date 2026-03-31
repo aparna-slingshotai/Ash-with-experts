@@ -59,6 +59,18 @@ async function handleMeetingEnded() {
   sessionState = STATES.PROCESSING;
   await chrome.storage.session.set({ sessionState: STATES.PROCESSING });
   broadcastToSidePanel({ type: "MEETING_ENDED" });
+
+  // After a short delay, prompt for debrief
+  setTimeout(() => {
+    chrome.notifications.create("ash-debrief", {
+      type: "basic",
+      iconUrl: "icons/icon48.png",
+      title: "Want to talk about it?",
+      message: "Ash is here if you want to debrief your session.",
+      priority: 2,
+    });
+    broadcastToSidePanel({ type: "DEBRIEF_PROMPT" });
+  }, 3000);
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────

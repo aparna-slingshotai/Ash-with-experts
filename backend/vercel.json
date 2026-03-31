@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "buildCommand": "npx prisma generate",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/health", "destination": "/api" }
+  ]
+}

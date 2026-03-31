@@ -29,3 +29,18 @@ model ThreadMessage {
 
   @@index([sessionId, createdAt])
 }
+
+model Debrief {
+  id                   String    @id @default(uuid())
+  userId               String    @default("default-user")
+  ventTranscript       String    @default("")
+  questionnaireAnswers Json      @default("{}")
+  qaHistory            Json      @default("[]")
+  insight              Json?
+  rememberDebrief      Boolean   @default(false)
+  rememberAnswers      Boolean   @default(false)
+  rememberInsight      Boolean   @default(false)
+  durationMinutes      Float     @default(0)
+  createdAt            DateTime  @default(now())
+  completedAt          DateTime?
+}

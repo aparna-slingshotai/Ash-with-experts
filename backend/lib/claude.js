@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const hasKey = !!process.env.ANTHROPIC_API_KEY;
+
+export const anthropic = hasKey
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 
 const SYSTEM_PROMPT = `You are Ash, a compassionate AI that works alongside therapy — never instead of it.
 
