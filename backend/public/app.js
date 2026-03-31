@@ -691,7 +691,7 @@ function handleChatSend() {
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble user";
   bubble.textContent = text;
-  scroll.insertBefore(bubble, $("hairline"));
+  scroll.appendChild(bubble);
   scroll.scrollTop = scroll.scrollHeight;
 
   // TODO: hook up to /api/sessions/:id/messages for real AI responses
